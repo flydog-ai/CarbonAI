@@ -1,0 +1,15 @@
+{
+  "name": "@carbon-ai/gateway",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@carbon-ai/config": "workspace:*",
+    "@carbon-ai/db": "workspace:*",
+    "@carbon-ai/protocol": "workspace:*",
+    "hono": "^4.9.8"
+  }
+}

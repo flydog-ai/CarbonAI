@@ -1,0 +1,50 @@
+[server]
+host = "loopback"          # 127.0.0.1 + ::1；可选 "127.0.0.1" | "0.0.0.0"
+port = 12580
+data_dir = "~/.carbon-ai"
+max_body_bytes = 16777216
+
+[auth]
+operator_token = ""
+
+[[auth.api_keys]]
+label = "Claude Code"
+key = "sk-carbon-local"
+
+[jobs]
+max_pending = 16
+max_active = 8
+wait_timeout_sec = 3600
+heartbeat_interval_ms = 10000
+claim_ttl_ms = 15000
+operator_required = "wait"
+timeout_behavior = "error"
+delta_coalesce_ms = 32
+eager_content_block = false
+auto_claim = true
+fake_chunk_text = true
+fake_chunk_tool_json = false
+emit_empty_reasoning = "auto"
+emit_thinking = "never"
+retention_days = 14
+
+[models]
+default_id = "carbon-default"
+default_display = "Carbon AI"
+
+[models.aliases]
+"claude-opus-4-6" = "Carbon AI (Opus slot)"
+"claude-sonnet-4-6" = "Carbon AI (Sonnet slot)"
+"claude-haiku-4-5" = "Carbon AI (Haiku slot)"
+"gpt-5" = "Carbon AI (GPT slot)"
+
+[cors]
+enabled = false
+origins = []
+
+[openai_chat]
+heartbeat = "comment"
+midstream_error = "error_chunk"
+
+[openai_responses]
+heartbeat = "both"

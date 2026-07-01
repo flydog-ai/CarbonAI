@@ -1,0 +1,13 @@
+node_modules/
+.idea/
+dist/
+.DS_Store
+**/.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+.carbon-ai/
+data/
+coverage/
+*.tsbuildinfo
