@@ -243,6 +243,7 @@ export function renderHomePage(data: HomePageData): string {
         Import into Claude Code
         <small>导入到 Claude Code · CC Switch</small>
       </a>
+      <p class="hint"><a href="/ui">Operator desk / 操作台</a></p>
       <p class="hint">
         Requires <a href="https://ccswitch.io" rel="noreferrer">CC Switch</a>. Base URL has no <code>/v1</code>. Confirm the import in CC Switch.
       </p>

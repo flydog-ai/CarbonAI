@@ -10,6 +10,7 @@ import { modelsRoutes } from "./routes/models.ts";
 import { anthropicRoutes } from "./routes/anthropic.ts";
 import { debugRoutes } from "./routes/debug.ts";
 import { debugJobRoutes } from "./routes/debug-jobs.ts";
+import { operatorRoutes } from "./routes/operator.ts";
 
 export type AppDeps = {
   sessions?: HangRegistry;
@@ -30,6 +31,7 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Hono {
   app.route("/", modelsRoutes(cfg));
   app.route("/", debugRoutes(sessions));
   if (deps.engine) {
+    app.route("/", operatorRoutes(cfg, deps.engine));
     app.route("/", anthropicRoutes(cfg, deps.engine));
     app.route("/", debugJobRoutes(cfg, deps.engine));
   }

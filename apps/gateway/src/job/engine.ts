@@ -353,6 +353,10 @@ export class JobEngine {
     return this.summary(this.require(jobId));
   }
 
+  normalized(jobId: string): NormalizedRequest {
+    return this.require(jobId).request;
+  }
+
   output(jobId: string): AssistantOutput {
     const rt = this.require(jobId);
     return fold(rt.events);

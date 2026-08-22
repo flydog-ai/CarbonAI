@@ -77,6 +77,8 @@ bun start
 | Path | English | 中文 |
 |---|---|---|
 | `GET /` | Home; one-click CC Switch import into Claude Code (`ccswitch://`, no `/v1`) | 首页；一键用 CC Switch 导入到 Claude Code（地址不含 `/v1`） |
+| `GET /ui` | Operator desk: inbox, paginated context, text reply | 操作台：收件箱、分页上下文、文本回复 |
+| `POST /api/operator/login` | Operator cookie from `operator_token` | 用 `operator_token` 换操作者 cookie |
 | `GET /v1/models` | Model list (client key required; Anthropic shape if `anthropic-version` is set) | 模型列表（要客户端 key；带 `anthropic-version` 时为 Anthropic 形状） |
 | `POST /v1/messages` | Anthropic Messages, SSE or JSON; hangs until the operator `complete`s | Anthropic Messages，SSE 或 JSON；挂起直到操作者 `complete` |
 | `POST /v1/messages/count_tokens` | Heuristic `input_tokens` | 启发式 input_tokens |

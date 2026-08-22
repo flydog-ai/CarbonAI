@@ -41,6 +41,11 @@ export function estimateRequestTokens(req: NormalizedRequest): number {
   return Math.max(1, sys + msgs);
 }
 
+function isNoiseUserText(text: string): boolean {
+  const t = text.trimStart();
+  return t.startsWith("<system-reminder>") || t.startsWith("<system-reminder");
+}
+
 export function lastUserPreview(req: NormalizedRequest, max = 200): string {
   for (let i = req.messages.length - 1; i >= 0; i--) {
     const m = req.messages[i];
@@ -49,7 +54,7 @@ export function lastUserPreview(req: NormalizedRequest, max = 200): string {
       .filter((p): p is { type: "text"; text: string } => p.type === "text")
       .map((p) => p.text)
       .join("\n");
-    if (!text) continue;
+    if (!text || isNoiseUserText(text)) continue;
     return text.length <= max ? text : text.slice(0, max);
   }
   return "";

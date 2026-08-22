@@ -10,6 +10,12 @@ function sha256(value: string): Buffer {
   return createHash("sha256").update(value).digest();
 }
 
+export function secretsEqual(presented: string, stored: string): boolean {
+  const a = sha256(presented);
+  const b = sha256(stored);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export function presentedClientKey(headers: Headers): string | undefined {
   const x = headers.get("x-api-key")?.trim();
   if (x) return x;
