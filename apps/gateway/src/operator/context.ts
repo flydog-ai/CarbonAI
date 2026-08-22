@@ -1,6 +1,7 @@
 import {
   estimateTextTokens,
   isMetaTag,
+  parseEnvPairs,
   splitMarkup,
   type AssistantOutput,
   type ContentPart,
@@ -23,6 +24,7 @@ export type ContextBlock = {
   tokenEst: number;
   truncated: boolean;
   source: "request" | "reply";
+  fields?: { key: string; value: string }[];
 };
 
 export type ContextPage = {
@@ -72,6 +74,15 @@ function laneFor(role: ContextBlock["role"], kind: string): ContextLane {
   return "user";
 }
 
+function fieldsFor(kind: string, raw: string): { key: string; value: string }[] | undefined {
+  const k = kind.toLowerCase();
+  if (k === "env" || k === "user_info" || k === "user-info") {
+    const pairs = parseEnvPairs(raw);
+    return pairs.length ? pairs : undefined;
+  }
+  return undefined;
+}
+
 function makeBlock(
   index: number,
   role: ContextBlock["role"],
@@ -81,6 +92,7 @@ function makeBlock(
 ): ContextBlock {
   const max = opts.max ?? (laneFor(role, kind) === "user" || laneFor(role, kind) === "assistant" ? INLINE_LIMIT : SYS_EXCERPT);
   const { excerpt, truncated } = clip(raw, Math.min(max, INLINE_LIMIT));
+  const fields = fieldsFor(kind, raw);
   return {
     index,
     role,
@@ -92,7 +104,27 @@ function makeBlock(
     tokenEst: estimateTextTokens(raw),
     truncated,
     source: opts.source ?? "request",
+    ...(fields ? { fields } : {}),
   };
+}
+
+const COMMAND_FOLLOW = new Set(["command-message", "command-args"]);
+
+function coalesceCommands(blocks: ContextBlock[]): ContextBlock[] {
+  const out: ContextBlock[] = [];
+  for (const b of blocks) {
+    const last = out.at(-1);
+    if (last && (last.kind === "command-name" || last.kind === "command") && COMMAND_FOLLOW.has(b.kind)) {
+      const line = b.kind === "command-args" ? (b.excerpt ? `args ${b.excerpt}` : "") : b.excerpt;
+      last.kind = "command";
+      last.title = "command-name";
+      last.excerpt = [last.excerpt, line].filter(Boolean).join("\n");
+      last.collapsed = false;
+      continue;
+    }
+    out.push({ ...b, index: out.length });
+  }
+  return out;
 }
 
 function pushText(
@@ -146,7 +178,7 @@ export function flattenSystem(req: NormalizedRequest): ContextBlock[] {
     const names = req.tools.map((t) => ("name" in t ? t.name : t.kind)).join(", ");
     blocks.push(makeBlock(blocks.length, "system", "tools", names, { collapsed: true, title: "tools" }));
   }
-  return blocks;
+  return coalesceCommands(blocks);
 }
 
 export function flattenMessages(req: NormalizedRequest): ContextBlock[] {
@@ -155,7 +187,7 @@ export function flattenMessages(req: NormalizedRequest): ContextBlock[] {
     const collapsed = msg.role === "system" || msg.role === "developer";
     for (const part of msg.parts) pushText(blocks, msg.role, part, collapsed, "request");
   }
-  return blocks;
+  return coalesceCommands(blocks);
 }
 
 export function flattenReply(output: AssistantOutput | undefined): ContextBlock[] {

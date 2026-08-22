@@ -567,6 +567,18 @@ function tagLabel(t: (k: string, v?: Record<string, string | number>) => string,
 }
 
 function BlockBody({ block }: { block: ContextBlock }) {
+  if (block.fields?.length) {
+    return (
+      <dl className="kv">
+        {block.fields.map((row, i) => (
+          <div key={i} className="kv-row">
+            {row.key ? <dt>{row.key}</dt> : null}
+            <dd>{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
   return <pre>{block.excerpt}{block.truncated ? "…" : ""}</pre>;
 }
 

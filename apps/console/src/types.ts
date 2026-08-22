@@ -48,6 +48,7 @@ export type ContextBlock = {
   collapsed?: boolean;
   truncated?: boolean;
   source?: "request" | "reply";
+  fields?: { key: string; value: string }[];
 };
 
 export type ContextPage = {

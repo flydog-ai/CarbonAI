@@ -55,6 +55,37 @@ describe("operator context", () => {
     expect(chat.some((b) => b.lane === "user" && b.excerpt.includes("please fix the login"))).toBe(true);
   });
 
+  test("env tag becomes key/value fields; slash commands coalesce", () => {
+    const req = emptyNormalizedRequest({
+      system: [
+        {
+          type: "text",
+          text: "<env>\nWorking directory: /tmp/proj\nPlatform: darwin\n</env>",
+        },
+      ],
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "text",
+              text: "<command-name>/commit</command-name><command-message>commit</command-message><command-args>-m hi</command-args>",
+            },
+          ],
+        },
+      ],
+    });
+    const sys = flattenContext(req).filter((b) => b.kind === "env");
+    expect(sys[0]?.fields).toEqual([
+      { key: "Working directory", value: "/tmp/proj" },
+      { key: "Platform", value: "darwin" },
+    ]);
+    const cmd = flattenMessages(req).find((b) => b.kind === "command");
+    expect(cmd?.excerpt).toContain("/commit");
+    expect(cmd?.excerpt).toContain("commit");
+    expect(cmd?.excerpt).toContain("args -m hi");
+  });
+
   test("operator reply is an assistant bubble with source reply", () => {
     const req = emptyNormalizedRequest({
       messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }],
