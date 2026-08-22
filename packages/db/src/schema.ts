@@ -63,6 +63,11 @@ CREATE TABLE IF NOT EXISTS api_keys (
 
 CREATE INDEX IF NOT EXISTS api_keys_user ON api_keys(user_id);
 CREATE INDEX IF NOT EXISTS api_keys_hash ON api_keys(key_hash);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `;
 
 export type JobRow = {

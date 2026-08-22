@@ -2,6 +2,8 @@ export type HomePageData = {
   href: string;
   endpoint: string;
   displayName: string;
+  siteName?: string;
+  siteNameZh?: string;
   model: string;
   apiKey: string;
 };
@@ -19,6 +21,8 @@ export function renderHomePage(data: HomePageData): string {
   const href = escapeHtml(data.href);
   const endpoint = escapeHtml(data.endpoint);
   const displayName = escapeHtml(data.displayName);
+  const siteName = escapeHtml(data.siteName || "Carbon AI");
+  const siteNameZh = escapeHtml(data.siteNameZh || "碳基智能");
   const model = escapeHtml(data.model);
   const apiKey = escapeHtml(data.apiKey);
 
@@ -27,7 +31,7 @@ export function renderHomePage(data: HomePageData): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${displayName} · 碳基智能</title>
+  <title>${siteName} · ${siteNameZh}</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23c44914'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='15' fill='%23f1e6d0' font-family='Georgia,serif'%3EC%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -221,8 +225,8 @@ export function renderHomePage(data: HomePageData): string {
 <body>
   <main>
     <section class="mast">
-      <p class="kicker">Carbon AI · 碳基智能</p>
-      <h1>Carbon AI</h1>
+      <p class="kicker">${siteName} · ${siteNameZh}</p>
+      <h1>${siteName}</h1>
       <p class="lede">No API, no token, idle agents. Package yourself as a model and show up in anyone's client list.</p>
       <p class="lede">没有可用的 API 和 Token，智能体闲着。把自己打包成模型，出现在任何人的客户端列表里。</p>
     </section>

@@ -25,6 +25,12 @@ export function preferLoopbackOrigin(requestUrl: string): string {
   return url.origin;
 }
 
+/** Public origin for CC Switch / homepage. Empty site.publicOrigin follows the request. */
+export function siteOrigin(cfg: Config, requestUrl: string): string {
+  const set = cfg.site.publicOrigin.trim().replace(/\/$/, "");
+  return set || preferLoopbackOrigin(requestUrl);
+}
+
 export function guestApiKeyFromToml(cfg: Config): string | undefined {
   const key = cfg.auth.apiKeys.find((k) => k.key.trim())?.key.trim();
   return key || undefined;

@@ -6,7 +6,7 @@ import { claudeModelSlots } from "@carbon-ai/protocol";
 import { resetBootstrapIfRequested } from "../auth/bootstrap.ts";
 import { apiKeyPrefix, hashApiKey, mintApiKeyPlaintext, verifyClientKey } from "../auth/client-keys.ts";
 import { USER_COOKIE, UserSessions } from "../auth/user-session.ts";
-import { buildCcSwitchClaudeImportHref, preferLoopbackOrigin } from "../home/cc-switch.ts";
+import { buildCcSwitchClaudeImportHref, siteOrigin } from "../home/cc-switch.ts";
 import { readJsonCapped } from "../http/read-json-capped.ts";
 
 const USER_RE = /^[a-zA-Z0-9_-]{3,32}$/;
@@ -133,7 +133,7 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): H
   app.get("/api/me/connect", (c) => {
     const user = authedUser(c);
     if (!user) return c.json({ error: "unauthorized" }, 401);
-    const endpoint = preferLoopbackOrigin(c.req.url);
+    const endpoint = siteOrigin(cfg, c.req.url);
     const slots = claudeModelSlots({
       defaultId: cfg.models.defaultId,
       aliases: cfg.models.aliases,
@@ -141,7 +141,10 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): H
     return c.json({
       endpoint,
       openaiEndpoint: `${endpoint}/v1`,
-      displayName: cfg.models.defaultDisplay || "Carbon AI",
+      displayName: cfg.models.defaultDisplay || cfg.site.name || "Carbon AI",
+      siteName: cfg.site.name,
+      siteNameZh: cfg.site.nameZh,
+      publicOrigin: cfg.site.publicOrigin,
       ...slots,
       notes: "Claude Code / CC Switch: base URL has no /v1. OpenAI-style clients append /v1 (adapter next).",
     });
@@ -154,8 +157,8 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): H
     const apiKey = (body.apiKey ?? "").trim();
     const id = verifyClientKey(cfg, apiKey, db);
     if (!id || id.userId !== user.id) return c.json({ error: "key does not belong to this account" }, 403);
-    const endpoint = preferLoopbackOrigin(c.req.url);
-    const displayName = cfg.models.defaultDisplay || "Carbon AI";
+    const endpoint = siteOrigin(cfg, c.req.url);
+    const displayName = cfg.models.defaultDisplay || cfg.site.name || "Carbon AI";
     const slots = claudeModelSlots({
       defaultId: cfg.models.defaultId,
       aliases: cfg.models.aliases,

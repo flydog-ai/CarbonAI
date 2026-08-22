@@ -1,10 +1,18 @@
 import { Hono, type Context } from "hono";
 import { getCookie } from "hono/cookie";
+import {
+  SETTINGS_KEYS,
+  applySettingsKv,
+  normalizePublicOrigin,
+  publicSettings,
+  type Config,
+} from "@carbon-ai/config";
 import type { CarbonDb } from "@carbon-ai/db";
 import { USER_COOKIE, UserSessions } from "../auth/user-session.ts";
+import { preferLoopbackOrigin } from "../home/cc-switch.ts";
 import { readJsonCapped } from "../http/read-json-capped.ts";
 
-export function adminRoutes(db: CarbonDb, sessions: UserSessions): Hono {
+export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): Hono {
   const app = new Hono();
 
   const superadmin = (c: Context) => {
@@ -17,6 +25,51 @@ export function adminRoutes(db: CarbonDb, sessions: UserSessions): Hono {
 
   app.get("/admin", (c) => c.redirect("/console?view=users"));
   app.get("/admin/", (c) => c.redirect("/console?view=users"));
+
+  app.get("/api/admin/settings", (c) => {
+    if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
+    return c.json({
+      ...publicSettings(cfg),
+      autoOrigin: preferLoopbackOrigin(c.req.url),
+    });
+  });
+
+  app.patch("/api/admin/settings", async (c) => {
+    if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
+    const body = (await readJsonCapped(c.req.raw, 4096)) as {
+      name?: string;
+      nameZh?: string;
+      publicOrigin?: string;
+      defaultDisplay?: string;
+    };
+    const kv: Record<string, string> = {};
+    if (typeof body.name === "string") {
+      const name = body.name.trim();
+      if (name.length < 1 || name.length > 64) return c.json({ error: "site name must be 1-64 characters" }, 400);
+      kv[SETTINGS_KEYS.name] = name;
+    }
+    if (typeof body.nameZh === "string") {
+      const nameZh = body.nameZh.trim();
+      if (nameZh.length < 1 || nameZh.length > 64) return c.json({ error: "site name (zh) must be 1-64 characters" }, 400);
+      kv[SETTINGS_KEYS.nameZh] = nameZh;
+    }
+    if (typeof body.publicOrigin === "string") {
+      const origin = normalizePublicOrigin(body.publicOrigin);
+      if (typeof origin !== "string") return c.json({ error: origin.error }, 400);
+      kv[SETTINGS_KEYS.publicOrigin] = origin;
+    }
+    if (typeof body.defaultDisplay === "string") {
+      const display = body.defaultDisplay.trim();
+      if (display.length < 1 || display.length > 64) return c.json({ error: "display name must be 1-64 characters" }, 400);
+      kv[SETTINGS_KEYS.defaultDisplay] = display;
+    }
+    for (const [key, value] of Object.entries(kv)) db.settings.set(key, value);
+    applySettingsKv(cfg, kv);
+    return c.json({
+      ...publicSettings(cfg),
+      autoOrigin: preferLoopbackOrigin(c.req.url),
+    });
+  });
 
   app.get("/api/admin/users", (c) => {
     if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);

@@ -32,6 +32,11 @@ emit_empty_reasoning = "auto"
 emit_thinking = "never"
 retention_days = 14
 
+[site]
+name = "Carbon AI"
+name_zh = "碳基智能"
+public_origin = ""          # empty = follow the request (127.0.0.1). 留空则跟随请求。
+
 [models]
 default_id = "carbon-default"
 default_display = "Carbon AI"

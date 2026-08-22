@@ -41,6 +41,11 @@ type TomlFile = {
     emit_thinking?: string;
     retention_days?: number;
   };
+  site?: {
+    name?: string;
+    name_zh?: string;
+    public_origin?: string;
+  };
   models?: {
     default_id?: string;
     default_display?: string;
@@ -158,6 +163,11 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
     if (j.emit_thinking === "never" || j.emit_thinking === "always") cfg.jobs.emitThinking = j.emit_thinking;
     if (typeof j.retention_days === "number") cfg.jobs.retentionDays = j.retention_days;
   }
+  if (file.site) {
+    if (typeof file.site.name === "string" && file.site.name.trim()) cfg.site.name = file.site.name.trim();
+    if (typeof file.site.name_zh === "string" && file.site.name_zh.trim()) cfg.site.nameZh = file.site.name_zh.trim();
+    if (typeof file.site.public_origin === "string") cfg.site.publicOrigin = file.site.public_origin.trim().replace(/\/$/, "");
+  }
   if (file.models) {
     if (typeof file.models.default_id === "string") cfg.models.defaultId = file.models.default_id;
     if (typeof file.models.default_display === "string") cfg.models.defaultDisplay = file.models.default_display;
@@ -185,6 +195,9 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
   if (env.CARBON_API_KEYS) cfg.auth.apiKeys = parseApiKeysJson(env.CARBON_API_KEYS);
   if (env.CARBON_BOOTSTRAP_USERNAME) cfg.auth.bootstrapUsername = env.CARBON_BOOTSTRAP_USERNAME;
   if (env.CARBON_BOOTSTRAP_PASSWORD) cfg.auth.bootstrapPassword = env.CARBON_BOOTSTRAP_PASSWORD;
+  if (env.CARBON_SITE_NAME) cfg.site.name = env.CARBON_SITE_NAME;
+  if (env.CARBON_SITE_NAME_ZH) cfg.site.nameZh = env.CARBON_SITE_NAME_ZH;
+  if (env.CARBON_PUBLIC_ORIGIN) cfg.site.publicOrigin = env.CARBON_PUBLIC_ORIGIN.trim().replace(/\/$/, "");
 
   cfg.server.dataDir = expandHome(cfg.server.dataDir);
 

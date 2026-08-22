@@ -1,5 +1,11 @@
 export { loadConfig, expandHome, findConfigFile, type LoadConfigOptions } from "./load.ts";
 export {
+  SETTINGS_KEYS,
+  applySettingsKv,
+  normalizePublicOrigin,
+  publicSettings,
+} from "./site.ts";
+export {
   DEFAULT_CONFIG,
   type ApiKey,
   type BindHost,

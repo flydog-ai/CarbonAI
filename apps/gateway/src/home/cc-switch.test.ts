@@ -5,6 +5,7 @@ import {
   buildCcSwitchClaudeImportHref,
   clientApiKey,
   preferLoopbackOrigin,
+  siteOrigin,
 } from "./cc-switch.ts";
 
 describe("preferLoopbackOrigin", () => {
@@ -12,6 +13,19 @@ describe("preferLoopbackOrigin", () => {
     expect(preferLoopbackOrigin("http://localhost:12580/")).toBe("http://127.0.0.1:12580");
     expect(preferLoopbackOrigin("http://[::1]:12580/")).toBe("http://127.0.0.1:12580");
     expect(preferLoopbackOrigin("http://127.0.0.1:12580/")).toBe("http://127.0.0.1:12580");
+  });
+});
+
+describe("siteOrigin", () => {
+  test("uses configured public origin when set", () => {
+    const cfg = structuredClone(DEFAULT_CONFIG);
+    cfg.site.publicOrigin = "https://ai.example";
+    expect(siteOrigin(cfg, "http://localhost:12580/console")).toBe("https://ai.example");
+  });
+
+  test("falls back to the request origin", () => {
+    const cfg = structuredClone(DEFAULT_CONFIG);
+    expect(siteOrigin(cfg, "http://localhost:12580/")).toBe("http://127.0.0.1:12580");
   });
 });
 

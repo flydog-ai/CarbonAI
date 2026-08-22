@@ -42,6 +42,11 @@ export type Config = {
     emitThinking: EmitThinking;
     retentionDays: number;
   };
+  site: {
+    name: string;
+    nameZh: string;
+    publicOrigin: string;
+  };
   models: {
     defaultId: string;
     defaultDisplay: string;
@@ -89,6 +94,11 @@ export const DEFAULT_CONFIG: Config = {
     emitEmptyReasoning: "auto",
     emitThinking: "never",
     retentionDays: 14,
+  },
+  site: {
+    name: "Carbon AI",
+    nameZh: "碳基智能",
+    publicOrigin: "",
   },
   models: {
     defaultId: "carbon-default",

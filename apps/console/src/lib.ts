@@ -43,9 +43,9 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export function readView(): "home" | "desk" | "keys" | "users" {
+export function readView(): "home" | "desk" | "keys" | "users" | "settings" {
   const v = new URLSearchParams(location.search).get("view");
-  if (v === "desk" || v === "keys" || v === "users" || v === "home") return v;
+  if (v === "desk" || v === "keys" || v === "users" || v === "home" || v === "settings") return v;
   return "home";
 }
 

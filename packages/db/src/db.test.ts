@@ -71,6 +71,9 @@ describe("users", () => {
     });
     db.users.deleteKey(doomed);
     expect(db.users.getKey(doomed)).toBeNull();
+    db.settings.set("site.name", "Desk");
+    expect(db.settings.get("site.name")).toBe("Desk");
+    expect(db.settings.getAll()["site.name"]).toBe("Desk");
     db.users.updateFlags(user.id, { can_reply: false, disabled: true });
     expect(db.users.getById(user.id)?.can_reply).toBe(0);
     expect(db.users.getById(user.id)?.disabled).toBe(1);

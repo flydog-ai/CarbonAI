@@ -1,4 +1,4 @@
-import { loadConfig } from "@carbon-ai/config";
+import { applySettingsKv, loadConfig } from "@carbon-ai/config";
 import { openDatabase } from "@carbon-ai/db";
 import { createApp } from "./app.ts";
 import { ensureBootstrapAdmin, resetBootstrapIfRequested } from "./auth/bootstrap.ts";
@@ -9,6 +9,7 @@ import { acquirePidfile } from "./pidfile.ts";
 const cfg = loadConfig({ generateOperatorTokenIfEmpty: true });
 const lock = acquirePidfile(cfg.server.dataDir);
 const db = openDatabase(cfg.server.dataDir);
+applySettingsKv(cfg, db.settings.getAll());
 await ensureBootstrapAdmin(cfg, db);
 await resetBootstrapIfRequested(cfg, db);
 const engine = new JobEngine(cfg, db);

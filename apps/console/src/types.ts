@@ -1,6 +1,6 @@
 export type Lang = "en" | "zh";
 
-export type View = "home" | "desk" | "keys" | "users";
+export type View = "home" | "desk" | "keys" | "users" | "settings";
 
 export type User = {
   id: string;
@@ -22,6 +22,18 @@ export type ApiKey = {
 export type ConnectInfo = {
   endpoint: string;
   model?: string;
+  displayName?: string;
+  siteName?: string;
+  siteNameZh?: string;
+  publicOrigin?: string;
+};
+
+export type SiteSettings = {
+  name: string;
+  nameZh: string;
+  publicOrigin: string;
+  defaultDisplay: string;
+  autoOrigin?: string;
 };
 
 export type GuestKey = { label: string; prefix: string };

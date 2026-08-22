@@ -55,6 +55,41 @@ describe("user accounts phase 1", () => {
     });
   });
 
+  test("superadmin can set site name and public origin", async () => {
+    await withSrv(async (url) => {
+      const login = await fetch(`${url}/api/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "adminpass" }),
+      });
+      expect(login.status).toBe(200);
+      const cookie = cookieFrom(login);
+      const denied = await fetch(`${url}/api/admin/settings`);
+      expect(denied.status).toBe(403);
+      const patched = await fetch(`${url}/api/admin/settings`, {
+        method: "PATCH",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Desk",
+          nameZh: "工作台",
+          publicOrigin: "https://ai.example",
+          defaultDisplay: "Desk Model",
+        }),
+      });
+      expect(patched.status).toBe(200);
+      const body = (await patched.json()) as { name: string; publicOrigin: string; defaultDisplay: string };
+      expect(body.name).toBe("Desk");
+      expect(body.publicOrigin).toBe("https://ai.example");
+      const home = await fetch(`${url}/`);
+      expect(await home.text()).toContain("Desk");
+      const connect = await fetch(`${url}/api/me/connect`, { headers: { cookie } });
+      const info = (await connect.json()) as { endpoint: string; siteName: string; displayName: string };
+      expect(info.endpoint).toBe("https://ai.example");
+      expect(info.siteName).toBe("Desk");
+      expect(info.displayName).toBe("Desk Model");
+    });
+  });
+
   test("register issues a key; key authenticates /v1/models; username shows on jobs", async () => {
     await withSrv(async (url) => {
       const reg = await fetch(`${url}/api/auth/register`, {

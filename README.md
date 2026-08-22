@@ -85,7 +85,7 @@ bun start
 | Path | English | 中文 |
 |---|---|---|
 | `GET /` | Home; Import uses the local guest key (`sk-carbon-local`); no account | 首页；Import 用本地匿名 key（`sk-carbon-local`），不用登录 |
-| `GET /console` | People UI: setup, login, keys, desk, users | 给人用的控制台：建超管、登录、密钥、操作台、用户 |
+| `GET /console` | People UI: setup, login, keys, desk, users, settings | 给人用的控制台：建超管、登录、密钥、操作台、用户、设置 |
 | `GET /ui` `/account` `/admin` | Redirect to `/console` | 跳到 `/console` |
 | `GET /v1/models` | Model list (client key required; Anthropic shape if `anthropic-version` is set) | 模型列表（要客户端 key；带 `anthropic-version` 时为 Anthropic 形状） |
 | `POST /v1/messages` | Anthropic Messages, SSE or JSON; hangs until the operator `complete`s | Anthropic Messages，SSE 或 JSON；挂起直到操作者 `complete` |
@@ -99,11 +99,11 @@ bun start
 | `GET /debug/jobs/:id/stream` | Hanging SSE until `complete` / cancel | 挂起 SSE，直到 `complete` / 取消 |
 | `POST /debug/jobs/:id/complete` | Simulate an operator reply | 模拟操作者回复 |
 
-Config: repo-root `carbon.toml`. Also `CARBON_PORT`, `CARBON_HOST`, `CARBON_DATA_DIR`, `CARBON_CONFIG`, `CARBON_BOOTSTRAP_USERNAME`, `CARBON_BOOTSTRAP_PASSWORD`.
+Config: repo-root `carbon.toml`. Also `CARBON_PORT`, `CARBON_HOST`, `CARBON_DATA_DIR`, `CARBON_CONFIG`, `CARBON_BOOTSTRAP_USERNAME`, `CARBON_BOOTSTRAP_PASSWORD`, `CARBON_SITE_NAME`, `CARBON_SITE_NAME_ZH`, `CARBON_PUBLIC_ORIGIN`. Superadmin Settings in `/console` can set site name and public origin without editing the file.
 
 Dev: `bun dev` (gateway watch + Vite rebuild of the console). `bun start` builds `apps/console/dist` then starts one Bun process.
 
-配置见仓库根目录 `carbon.toml`。也可用 `CARBON_PORT`、`CARBON_HOST`、`CARBON_DATA_DIR`、`CARBON_CONFIG`、`CARBON_BOOTSTRAP_USERNAME`、`CARBON_BOOTSTRAP_PASSWORD`。
+配置见仓库根目录 `carbon.toml`。也可用 `CARBON_PORT`、`CARBON_HOST`、`CARBON_DATA_DIR`、`CARBON_CONFIG`、`CARBON_BOOTSTRAP_USERNAME`、`CARBON_BOOTSTRAP_PASSWORD`、`CARBON_SITE_NAME`、`CARBON_SITE_NAME_ZH`、`CARBON_PUBLIC_ORIGIN`。超级管理员可在 `/console` 的设置里改站点名和对外域名，不必改文件。
 
 开发：`bun dev`（网关 watch + 控制台 Vite 重建）。`bun start` 先编 `apps/console/dist`，再单进程启动。
 

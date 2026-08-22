@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorKey, jsonBody } from "./api.ts";
 import {
   IconChat,
+  IconCog,
   IconCollapse,
   IconCopy,
   IconGrid,
@@ -15,7 +16,7 @@ import {
 } from "./components.tsx";
 import { detectLang, translate } from "./i18n.ts";
 import { copyText, fmtWhen, groupThreads, isLive, readView, secretPrefix, setViewUrl } from "./lib.ts";
-import type { ApiKey, ConnectInfo, ContextBlock, ContextPage, GuestKey, Job, Lang, User, View } from "./types.ts";
+import type { ApiKey, ConnectInfo, ContextBlock, ContextPage, GuestKey, Job, Lang, SiteSettings, User, View } from "./types.ts";
 
 type Gate = "boot" | "setup" | "login" | "app";
 
@@ -30,6 +31,7 @@ export function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [connect, setConnect] = useState<ConnectInfo | null>(null);
+  const [brand, setBrand] = useState("Carbon AI");
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const t = useCallback((key: string, vars?: Record<string, string | number>) => translate(lang, key, vars), [lang]);
 
@@ -43,6 +45,10 @@ export function App() {
   }, [lang, t]);
 
   useEffect(() => {
+    void (async () => {
+      const s = await api<{ name?: string }>("/api/site");
+      if (s.res.ok && s.body.name) setBrand(s.body.name);
+    })();
     void boot();
   }, []);
 
@@ -60,10 +66,13 @@ export function App() {
     }
     setUser(u);
     const conn = await api<ConnectInfo>("/api/me/connect");
-    if (conn.res.ok) setConnect(conn.body);
+    if (conn.res.ok) {
+      setConnect(conn.body);
+      if (conn.body.siteName) setBrand(conn.body.siteName);
+    }
     if (secret) rememberSecret(secret);
     const next = readView();
-    const allowed = next === "users" && u.role !== "superadmin" ? "home" : next;
+    const allowed = (next === "users" || next === "settings") && u.role !== "superadmin" ? "home" : next;
     setView(allowed);
     setViewUrl(allowed);
     setGate("app");
@@ -85,7 +94,7 @@ export function App() {
   }
 
   function go(next: View) {
-    const allowed = next === "users" && user?.role !== "superadmin" ? "home" : next;
+    const allowed = (next === "users" || next === "settings") && user?.role !== "superadmin" ? "home" : next;
     setView(allowed);
     setViewUrl(allowed);
     setSbOpen(false);
@@ -115,12 +124,13 @@ export function App() {
   };
 
   if (gate === "boot") return null;
-  if (gate === "setup") return <Setup t={t} lang={lang} onLang={changeLang} onDone={(s) => void boot(s)} />;
+  if (gate === "setup") return <Setup t={t} lang={lang} brand={brand} onLang={changeLang} onDone={(s) => void boot(s)} />;
   if (gate === "login") {
     return (
       <Login
         t={t}
         lang={lang}
+        brand={brand}
         onLang={changeLang}
         mode={authMode}
         setMode={setAuthMode}
@@ -139,7 +149,7 @@ export function App() {
         <div className="brand">
           <span className="mark">C</span>
           <div className="brand-text">
-            <strong>Carbon AI</strong>
+            <strong>{brand}</strong>
             <small>{t("brand.sub")}</small>
           </div>
         </div>
@@ -160,6 +170,10 @@ export function App() {
               <button type="button" className={`nav-btn${view === "users" ? " on" : ""}`} onClick={() => go("users")}>
                 <IconUsers />
                 <span className="nav-text">{t("nav.users")}</span>
+              </button>
+              <button type="button" className={`nav-btn${view === "settings" ? " on" : ""}`} onClick={() => go("settings")}>
+                <IconCog />
+                <span className="nav-text">{t("nav.settings")}</span>
               </button>
             </div>
           ) : null}
@@ -252,6 +266,7 @@ export function App() {
             <Keys t={t} connect={connect} secretFor={secretFor} rememberSecret={rememberSecret} copy={copy} flash={flash} statusLabel={statusLabel} />
           ) : null}
           {view === "users" && isAdmin ? <Users t={t} statusLabel={statusLabel} /> : null}
+          {view === "settings" && isAdmin ? <Settings t={t} flash={flash} onSite={setBrand} /> : null}
         </div>
       </section>
       {toast ? <div className="toast">{toast}</div> : null}
@@ -262,11 +277,13 @@ export function App() {
 function Setup({
   t,
   lang,
+  brand,
   onLang,
   onDone,
 }: {
   t: (k: string, v?: Record<string, string | number>) => string;
   lang: Lang;
+  brand: string;
   onLang: (l: Lang) => void;
   onDone: (secret?: string) => void;
 }) {
@@ -297,7 +314,7 @@ function Setup({
         }}
       >
         <div className="mark lg">C</div>
-        <p className="brand-name">Carbon AI</p>
+        <p className="brand-name">{brand}</p>
         <h1 style={{ textAlign: "center" }}>{t("setup.title")}</h1>
         <p className="sub" style={{ textAlign: "center" }}>{t("setup.sub")}</p>
         <label>{t("field.username")}</label>
@@ -317,6 +334,7 @@ function Setup({
 function Login({
   t,
   lang,
+  brand,
   onLang,
   mode,
   setMode,
@@ -324,6 +342,7 @@ function Login({
 }: {
   t: (k: string, v?: Record<string, string | number>) => string;
   lang: Lang;
+  brand: string;
   onLang: (l: Lang) => void;
   mode: "login" | "register";
   setMode: (m: "login" | "register") => void;
@@ -365,7 +384,7 @@ function Login({
         }}
       >
         <div className="mark lg">C</div>
-        <p className="brand-name">Carbon AI</p>
+        <p className="brand-name">{brand}</p>
         <h1 style={{ textAlign: "center" }}>{t(mode === "register" ? "register.title" : "login.title")}</h1>
         <p className="sub" style={{ textAlign: "center" }}>{t(mode === "register" ? "register.sub" : "login.sub")}</p>
         <label>{t("field.username")}</label>
@@ -1066,6 +1085,102 @@ function Users({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function Settings({
+  t,
+  flash,
+  onSite,
+}: {
+  t: (k: string, v?: Record<string, string | number>) => string;
+  flash: (msg: string) => void;
+  onSite: (name: string) => void;
+}) {
+  const [form, setForm] = useState<SiteSettings>({
+    name: "Carbon AI",
+    nameZh: "碳基智能",
+    publicOrigin: "",
+    defaultDisplay: "Carbon AI",
+    autoOrigin: "",
+  });
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    const { res, body } = await api<SiteSettings & { error?: string }>("/api/admin/settings");
+    if (!res.ok) {
+      setErr(t("err.forbidden"));
+      return;
+    }
+    setErr("");
+    setForm({
+      name: body.name || "Carbon AI",
+      nameZh: body.nameZh || "碳基智能",
+      publicOrigin: body.publicOrigin || "",
+      defaultDisplay: body.defaultDisplay || "Carbon AI",
+      autoOrigin: body.autoOrigin || "",
+    });
+  }
+  useEffect(() => { void load(); }, []);
+
+  return (
+    <div className="card card-pad" style={{ maxWidth: 560 }}>
+      <h3>{t("settings.title")}</h3>
+      <p className="sub">{t("settings.sub")}</p>
+      <label>{t("settings.name")}</label>
+      <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={64} />
+      <label>{t("settings.nameZh")}</label>
+      <input value={form.nameZh} onChange={(e) => setForm({ ...form, nameZh: e.target.value })} maxLength={64} />
+      <label>{t("settings.origin")}</label>
+      <input
+        className="mono"
+        value={form.publicOrigin}
+        placeholder={form.autoOrigin || "http://127.0.0.1:12580"}
+        onChange={(e) => setForm({ ...form, publicOrigin: e.target.value })}
+      />
+      <p className="sub" style={{ marginTop: 6 }}>{t("settings.originHint")}</p>
+      <label>{t("settings.display")}</label>
+      <input value={form.defaultDisplay} onChange={(e) => setForm({ ...form, defaultDisplay: e.target.value })} maxLength={64} />
+      <p className="err">{err}</p>
+      <p style={{ margin: "16px 0 0" }}>
+        <button
+          className="btn"
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setErr("");
+            const { res, body } = await api<SiteSettings & { error?: string }>("/api/admin/settings", {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                name: form.name,
+                nameZh: form.nameZh,
+                publicOrigin: form.publicOrigin,
+                defaultDisplay: form.defaultDisplay,
+              }),
+            });
+            setBusy(false);
+            if (!res.ok) {
+              setErr(body.error || t("settings.saveFailed"));
+              return;
+            }
+            setForm({
+              name: body.name,
+              nameZh: body.nameZh,
+              publicOrigin: body.publicOrigin,
+              defaultDisplay: body.defaultDisplay,
+              autoOrigin: body.autoOrigin || form.autoOrigin,
+            });
+            onSite(body.name);
+            flash(t("settings.saved"));
+          }}
+        >
+          {busy ? t("settings.saving") : t("settings.save")}
+        </button>
+      </p>
     </div>
   );
 }

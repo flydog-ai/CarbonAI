@@ -82,6 +82,28 @@ bootstrap_password = "fromfile"
     expect(cfg.auth.bootstrapPassword).toBe("fromenv");
   });
 
+  test("site name and public origin from toml and env", () => {
+    const dir = mkdtempSync(join(tmpdir(), "carbon-site-"));
+    writeFileSync(
+      join(dir, "carbon.toml"),
+      `
+[site]
+name = "From File"
+name_zh = "来自文件"
+public_origin = "http://example.test:8080/"
+`,
+      "utf8",
+    );
+    const cfg = loadConfig({
+      cwd: dir,
+      env: { CARBON_PUBLIC_ORIGIN: "https://live.example" },
+      generateOperatorTokenIfEmpty: false,
+    });
+    expect(cfg.site.name).toBe("From File");
+    expect(cfg.site.nameZh).toBe("来自文件");
+    expect(cfg.site.publicOrigin).toBe("https://live.example");
+  });
+
   test("CARBON_CONFIG points at an explicit file", () => {
     const dir = mkdtempSync(join(tmpdir(), "carbon-cfg-"));
     mkdirSync(join(dir, "nested"), { recursive: true });
