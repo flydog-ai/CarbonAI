@@ -11,6 +11,8 @@ import {
   lastUserPreview,
   sha256Hex,
   toolNames,
+  conversationTurns,
+  isConversationContinuation,
   type AssistantBlock,
   type AssistantOutput,
   type CancelReason,
@@ -56,6 +58,8 @@ export type JobSummary = {
   claimedBy?: string;
   looksLikeRetryOf?: string;
   userId?: string;
+  threadId?: string;
+  turnCount?: number;
 };
 
 type TerminalState = { status: "completed" | "cancelled" | "failed"; error?: string };
@@ -80,6 +84,8 @@ type Runtime = {
   claimedAt?: number;
   looksLikeRetryOf?: string;
   userId?: string;
+  threadId: string;
+  turnCount: number;
   adapter: ProtocolAdapter;
   writer?: SseSink;
   cancelReason?: CancelReason;
@@ -170,6 +176,14 @@ export class JobEngine {
         requestJson = new TextDecoder("utf-8", { fatal: false }).decode(input.rawBody);
       }
 
+      const clientKeyId = input.clientKeyId ?? "debug";
+      const parent = [...this.jobs.values()]
+        .filter((j) => j.clientKeyId === clientKeyId)
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .find((j) => isConversationContinuation(j.request, normalized));
+      const threadId = parent?.threadId ?? ids.thread();
+      const turnCount = Math.max(1, conversationTurns(normalized).length);
+
       let resolveAttached!: () => void;
       const attached = new Promise<void>((r) => {
         resolveAttached = r;
@@ -191,12 +205,14 @@ export class JobEngine {
         vendorMessageId,
         events: [],
         requestHash,
-        clientKeyId: input.clientKeyId ?? "debug",
+        clientKeyId,
         clientLabel: input.clientLabel ?? "debug",
         inputTokens: estimateRequestTokens(normalized),
         outputTokens: 0,
         looksLikeRetryOf: prior && prior.id !== id ? prior.id : undefined,
         userId: input.userId,
+        threadId,
+        turnCount,
         adapter: input.adapter ?? new TestAdapter(),
         attached,
         resolveAttached,
@@ -491,6 +507,8 @@ export class JobEngine {
       claimedBy: rt.claimedBy,
       looksLikeRetryOf: rt.looksLikeRetryOf,
       userId: rt.userId,
+      threadId: rt.threadId,
+      turnCount: rt.turnCount,
     };
   }
 }

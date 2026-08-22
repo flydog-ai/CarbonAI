@@ -70,6 +70,6 @@ Out of scope: proxying to a real model, Python, embeddings, image generation.
 
 ## License / 许可
 
-WTFPL. Software copyright FlyDogAI. See `LICENSE`.
+WTFPL. Software copyright FlyDogAI. See `LICENSE`. Console layout is inspired by Sub2API; this repo does not copy that source or use LGPL-3.0.
 
-WTFPL。软件版权归 FlyDogAI。见 `LICENSE`。
+WTFPL。软件版权归 FlyDogAI。见 `LICENSE`。控制台布局受 Sub2API 启发，不拷贝其源码，也不采用 LGPL-3.0。

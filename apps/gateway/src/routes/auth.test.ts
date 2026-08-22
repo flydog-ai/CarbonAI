@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_CONFIG, type Config } from "@carbon-ai/config";
 import { openDatabase } from "@carbon-ai/db";
 import { createApp } from "../app.ts";
-import { ensureBootstrapAdmin } from "../auth/bootstrap.ts";
+import { ensureBootstrapAdmin, resetBootstrapIfRequested } from "../auth/bootstrap.ts";
 import { JobEngine } from "../job/engine.ts";
 import { listen } from "../listen.ts";
 
@@ -41,15 +41,17 @@ async function withSrv(fn: (url: string) => Promise<void>): Promise<void> {
 }
 
 describe("user accounts phase 1", () => {
-  test("GET /account and /admin are html", async () => {
+  test("GET /account and /admin redirect to the console", async () => {
     await withSrv(async (url) => {
-      const account = await fetch(`${url}/account`);
-      expect(account.status).toBe(200);
-      expect(account.headers.get("content-type") ?? "").toContain("text/html");
-      expect(await account.text()).toContain("Account");
-      const admin = await fetch(`${url}/admin`);
-      expect(admin.status).toBe(200);
-      expect(await admin.text()).toContain("Users");
+      const account = await fetch(`${url}/account`, { redirect: "manual" });
+      expect(account.status).toBe(302);
+      expect(account.headers.get("location") ?? "").toContain("/console");
+      const admin = await fetch(`${url}/admin`, { redirect: "manual" });
+      expect(admin.status).toBe(302);
+      expect(admin.headers.get("location") ?? "").toContain("/console?view=users");
+      const page = await fetch(`${url}/console`);
+      expect(page.status).toBe(200);
+      expect(await page.text()).toContain("Console");
     });
   });
 
@@ -99,6 +101,26 @@ describe("user accounts phase 1", () => {
       expect(jobs.status).toBe(200);
       const listed = (await jobs.json()) as { jobs: { clientLabel: string; userId?: string }[] };
       expect(listed.jobs.some((j) => j.clientLabel === "alice")).toBe(true);
+
+      const minted = await fetch(`${url}/api/me/keys`, {
+        method: "POST",
+        headers: { cookie: adminCookie, "content-type": "application/json" },
+        body: JSON.stringify({ label: "tmp" }),
+      });
+      expect(minted.status).toBe(201);
+      const key = (await minted.json()) as { id: string; apiKey: string };
+      const removed = await fetch(`${url}/api/me/keys/${key.id}`, {
+        method: "DELETE",
+        headers: { cookie: adminCookie },
+      });
+      expect(removed.status).toBe(200);
+      const listedKeys = await fetch(`${url}/api/me/keys`, { headers: { cookie: adminCookie } });
+      const keysBody = (await listedKeys.json()) as { keys: { id: string }[] };
+      expect(keysBody.keys.some((k) => k.id === key.id)).toBe(false);
+      const dead = await fetch(`${url}/v1/models`, {
+        headers: { "x-api-key": key.apiKey, "anthropic-version": "2023-06-01" },
+      });
+      expect(dead.status).toBe(401);
     });
   });
 
@@ -142,5 +164,98 @@ describe("user accounts phase 1", () => {
       });
       expect(models.status).toBe(401);
     });
+  });
+
+  test("reset-bootstrap file updates the superadmin password once", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "carbon-reset-"));
+    const conf: Config = structuredClone(DEFAULT_CONFIG);
+    conf.server.dataDir = dir;
+    conf.auth.bootstrapUsername = "admin";
+    conf.auth.bootstrapPassword = "oldpass12";
+    const db = openDatabase(dir);
+    await ensureBootstrapAdmin(conf, db);
+    writeFileSync(join(dir, "reset-bootstrap"), "newpass99\n", "utf8");
+    expect(await resetBootstrapIfRequested(conf, db)).toBe(true);
+    const user = db.users.getByUsername("admin");
+    expect(user).toBeTruthy();
+    expect(await Bun.password.verify("newpass99", user!.password_hash)).toBe(true);
+    expect(await resetBootstrapIfRequested(conf, db)).toBe(false);
+    db.close();
+  });
+
+  test("empty database uses setup wizard; CC Switch href binds the issued key", async () => {
+    const conf: Config = structuredClone(DEFAULT_CONFIG);
+    conf.auth.operatorToken = "op-token";
+    conf.auth.bootstrapPassword = "";
+    const db = openDatabase(mkdtempSync(join(tmpdir(), "carbon-setup-")));
+    await ensureBootstrapAdmin(conf, db);
+    const engine = new JobEngine(conf, db);
+    const app = createApp(conf, { engine, db });
+    const handle = listen(app.fetch, { host: "127.0.0.1", port: pickPort(), idleTimeout: 0 });
+    const url = `http://127.0.0.1:${handle.port}`;
+    try {
+      const status = await fetch(`${url}/api/setup/status`);
+      expect(status.status).toBe(200);
+      expect(((await status.json()) as { needsSetup: boolean }).needsSetup).toBe(true);
+
+      const blocked = await fetch(`${url}/api/auth/register`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "alice", password: "password1" }),
+      });
+      expect(blocked.status).toBe(403);
+
+      const setup = await fetch(`${url}/api/setup`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "root", password: "password1" }),
+      });
+      expect(setup.status).toBe(201);
+      const created = (await setup.json()) as { user: { role: string; canReply: boolean }; apiKey: string };
+      expect(created.user.role).toBe("superadmin");
+      expect(created.user.canReply).toBe(true);
+      const cookie = cookieFrom(setup);
+
+      const again = await fetch(`${url}/api/setup`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "root2", password: "password1" }),
+      });
+      expect(again.status).toBe(409);
+
+      const cc = await fetch(`${url}/api/me/cc-switch`, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ apiKey: created.apiKey }),
+      });
+      expect(cc.status).toBe(200);
+      const body = (await cc.json()) as { href: string; endpoint: string };
+      expect(body.href.startsWith("ccswitch://v1/import?")).toBe(true);
+      expect(body.endpoint.endsWith("/v1")).toBe(false);
+      const qs = new URLSearchParams(body.href.slice("ccswitch://v1/import?".length));
+      expect(qs.get("apiKey")).toBe(created.apiKey);
+      expect(qs.get("app")).toBe("claude");
+
+      const minted = await fetch(`${url}/api/me/keys`, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ label: "cc" }),
+      });
+      expect(minted.status).toBe(201);
+      const key = (await minted.json()) as { id: string; apiKey: string; prefix: string };
+      expect(key.id.startsWith("key_")).toBe(true);
+      expect(key.apiKey.startsWith("sk-carbon-")).toBe(true);
+      const ccMinted = await fetch(`${url}/api/me/cc-switch`, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ apiKey: key.apiKey }),
+      });
+      expect(ccMinted.status).toBe(200);
+      expect(((await ccMinted.json()) as { href: string }).href).toContain(key.apiKey);
+    } finally {
+      handle.stop();
+      engine.stop();
+      db.close();
+    }
   });
 });

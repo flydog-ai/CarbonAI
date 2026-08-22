@@ -18,8 +18,8 @@ Carbon AI 把**人工操作者**包装成模型 API。网关**不调用任何 LL
 - 走 **Anthropic Messages** 与 **OpenAI 兼容** HTTP，任何能自定义模型地址的智能体都可以接（Claude Code、Codex、DeepSeek 类客户端等）。
 - Do not frame the product as Claude Code-only. Name a specific client only when the task is that integration (e.g. the CC Switch button).
 - 不要把产品写成只服务 Claude Code。只有任务就是某个接入时，才点名具体客户端（例如 CC Switch 按钮）。
-- Stack: TypeScript, Bun 1.2+ (Node 22 only if abort/SSE spikes fail). **No Python.**
-- 技术栈：TypeScript、Bun 1.2+（仅当 abort/SSE 尖峰失败才切 Node 22）。**禁止 Python。**
+- Stack: TypeScript, Bun 1.2+ (Node 22 only if abort/SSE spikes fail). Console is Vite + React + TypeScript; the gateway serves `apps/console/dist` at `/console`. Do not add a second HTTP server (no Next.js). **No Python.**
+- 技术栈：TypeScript、Bun 1.2+（仅当 abort/SSE 尖峰失败才切 Node 22）。控制台是 Vite + React + TypeScript；网关把 `apps/console/dist` 挂在 `/console`。不要再起一个 HTTP 服务（不要 Next.js）。**禁止 Python。**
 
 ---
 
@@ -135,8 +135,8 @@ Do not skip the suite to land a change. If a test is wrong, fix the test.
 
 ## Security / 安全
 
-- `operator_token` is root for the local console. `sk-carbon-local` is a client key. Neither belongs in git, screenshots of secrets, or public issues.
-- `operator_token` 是本机控制台 root。`sk-carbon-local` 是客户端 key。都不要进 git、密钥截图或公开 issue。
+- Toml `[[auth.api_keys]]` (`sk-carbon-local`) is the **local guest key** for agents (homepage Import). Account passwords open `/console`. Do not mix them. Neither belongs in git, screenshots of secrets, or public issues.
+- toml `[[auth.api_keys]]`（`sk-carbon-local`）是给智能体的**本地匿名 key**（首页 Import）。账号密码打开 `/console`。不要混用。都不要进 git、密钥截图或公开 issue。
 - Loopback by default. Do not bind `0.0.0.0` unless the user asks, and then origin checks are mandatory.
 - 默认 loopback。不要绑 `0.0.0.0`，除非用户要求；绑了就必须校验 Origin。
 

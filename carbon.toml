@@ -9,8 +9,10 @@ operator_token = ""
 bootstrap_username = "admin"
 bootstrap_password = ""
 
+# Local guest key for homepage Import. No account. Rotate if leaked.
+# 首页 Import 用的本地匿名 key。不用登录。泄漏了就改。
 [[auth.api_keys]]
-label = "Claude Code"
+label = "local guest"
 key = "sk-carbon-local"
 
 [jobs]

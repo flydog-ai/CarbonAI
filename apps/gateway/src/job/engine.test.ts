@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { DEFAULT_CONFIG, type Config } from "@carbon-ai/config";
 import { openDatabase, type CarbonDb } from "@carbon-ai/db";
 import { JobEngine } from "./engine.ts";
+import { emptyNormalizedRequest } from "@carbon-ai/protocol";
 import { JobQueueFullError } from "./errors.ts";
 import { TestAdapter } from "./test-adapter.ts";
 
@@ -51,6 +52,54 @@ describe("JobEngine", () => {
     const a = await engine.create({ protocol: "anthropic_messages", stream: true, rawBody: raw, headers: {} });
     const b = await engine.create({ protocol: "anthropic_messages", stream: true, rawBody: raw, headers: {} });
     expect(b.looksLikeRetryOf).toBe(a.id);
+    } finally {
+      engine.stop();
+      db.close();
+    }
+  });
+
+  test("follow-up messages share a thread id", async () => {
+    const { engine, db } = setup();
+    try {
+      const firstNorm = emptyNormalizedRequest({
+        messages: [{ role: "user", parts: [{ type: "text", text: "hello" }] }],
+      });
+      const first = await engine.create({
+        protocol: "anthropic_messages",
+        stream: true,
+        rawBody: new TextEncoder().encode("turn-1"),
+        headers: {},
+        normalized: firstNorm,
+        clientKeyId: "alice",
+      });
+      const secondNorm = emptyNormalizedRequest({
+        messages: [
+          { role: "user", parts: [{ type: "text", text: "hello" }] },
+          { role: "assistant", parts: [{ type: "text", text: "hi" }] },
+          { role: "user", parts: [{ type: "text", text: "next" }] },
+        ],
+      });
+      const second = await engine.create({
+        protocol: "anthropic_messages",
+        stream: true,
+        rawBody: new TextEncoder().encode("turn-2"),
+        headers: {},
+        normalized: secondNorm,
+        clientKeyId: "alice",
+      });
+      expect(second.threadId).toBe(first.threadId);
+      expect(second.turnCount).toBe(3);
+      const other = await engine.create({
+        protocol: "anthropic_messages",
+        stream: true,
+        rawBody: new TextEncoder().encode("other"),
+        headers: {},
+        normalized: emptyNormalizedRequest({
+          messages: [{ role: "user", parts: [{ type: "text", text: "unrelated" }] }],
+        }),
+        clientKeyId: "alice",
+      });
+      expect(other.threadId).not.toBe(first.threadId);
     } finally {
       engine.stop();
       db.close();

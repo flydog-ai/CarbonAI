@@ -59,6 +59,18 @@ describe("users", () => {
       revoked_at: null,
     });
     expect(db.users.getKeyByHash(keyHash)?.user_id).toBe(user.id);
+    const doomed = newApiKeyId();
+    db.users.insertKey({
+      id: doomed,
+      user_id: user.id,
+      label: "gone",
+      key_hash: createHash("sha256").update("sk-gone").digest("hex"),
+      key_prefix: "sk-gone…gone",
+      created_at: Date.now(),
+      revoked_at: null,
+    });
+    db.users.deleteKey(doomed);
+    expect(db.users.getKey(doomed)).toBeNull();
     db.users.updateFlags(user.id, { can_reply: false, disabled: true });
     expect(db.users.getById(user.id)?.can_reply).toBe(0);
     expect(db.users.getById(user.id)?.disabled).toBe(1);

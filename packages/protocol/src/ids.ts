@@ -36,6 +36,7 @@ export function ulid(now = Date.now()): string {
 
 export const ids = {
   job: (): string => `job_${ulid()}`,
+  thread: (): string => `thr_${ulid()}`,
   msg: (): string => `msg_01${alnum(24)}`,
   toolu: (): string => `toolu_01${alnum(24)}`,
   req: (): string => `req_01${alnum(24)}`,

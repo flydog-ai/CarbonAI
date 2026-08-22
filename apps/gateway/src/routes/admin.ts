@@ -3,7 +3,6 @@ import { getCookie } from "hono/cookie";
 import type { CarbonDb } from "@carbon-ai/db";
 import { USER_COOKIE, UserSessions } from "../auth/user-session.ts";
 import { readJsonCapped } from "../http/read-json-capped.ts";
-import { renderAdminPage } from "../operator/admin-page.ts";
 
 export function adminRoutes(db: CarbonDb, sessions: UserSessions): Hono {
   const app = new Hono();
@@ -16,8 +15,8 @@ export function adminRoutes(db: CarbonDb, sessions: UserSessions): Hono {
     return user;
   };
 
-  app.get("/admin", (c) => c.html(renderAdminPage()));
-  app.get("/admin/", (c) => c.html(renderAdminPage()));
+  app.get("/admin", (c) => c.redirect("/console?view=users"));
+  app.get("/admin/", (c) => c.redirect("/console?view=users"));
 
   app.get("/api/admin/users", (c) => {
     if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);

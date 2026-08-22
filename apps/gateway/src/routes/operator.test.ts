@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_CONFIG, type Config } from "@carbon-ai/config";
 import { openDatabase } from "@carbon-ai/db";
 import { createApp } from "../app.ts";
+import { ensureBootstrapAdmin } from "../auth/bootstrap.ts";
 import { JobEngine } from "../job/engine.ts";
 import { listen } from "../listen.ts";
 
@@ -26,8 +27,10 @@ function cookieFrom(res: Response): string {
 
 async function withSrv(fn: (url: string) => Promise<void>): Promise<void> {
   const conf: Config = structuredClone(DEFAULT_CONFIG);
-  conf.auth.operatorToken = "op-test-token";
+  conf.auth.bootstrapUsername = "admin";
+  conf.auth.bootstrapPassword = "password1";
   const db = openDatabase(mkdtempSync(join(tmpdir(), "carbon-op-")));
+  await ensureBootstrapAdmin(conf, db);
   const engine = new JobEngine(conf, db);
   const app = createApp(conf, { engine, db });
   const handle = listen(app.fetch, { host: "127.0.0.1", port: pickPort(), idleTimeout: 0 });
@@ -41,12 +44,33 @@ async function withSrv(fn: (url: string) => Promise<void>): Promise<void> {
 }
 
 describe("operator desk", () => {
-  test("GET /ui is html", async () => {
+  test("GET /console is html; /ui redirects", async () => {
     await withSrv(async (url) => {
-      const res = await fetch(`${url}/ui`);
+      const res = await fetch(`${url}/console`);
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type") ?? "").toContain("text/html");
-      expect(await res.text()).toContain("Operator desk");
+      const html = await res.text();
+      expect(html).toContain("Console");
+      expect(html).toContain('id="root"');
+      expect(html).not.toContain("data-i18n");
+      const slash = await fetch(`${url}/console/`);
+      expect(slash.status).toBe(200);
+      const missingAsset = await fetch(`${url}/console/assets/missing-test.js`);
+      expect(missingAsset.status).toBe(404);
+      const escape = await fetch(`${url}/console/../../package.json`);
+      expect(escape.status).not.toBe(200);
+      const dist = join(import.meta.dir, "../../../console/dist");
+      if (existsSync(join(dist, "index.html"))) {
+        expect(html).toContain("/console/assets/");
+        const js = readdirSync(join(dist, "assets")).find((f) => f.endsWith(".js"));
+        expect(js).toBeTruthy();
+        const asset = await fetch(`${url}/console/assets/${js}`);
+        expect(asset.status).toBe(200);
+        expect(asset.headers.get("content-type") ?? "").toMatch(/javascript|ecmascript/);
+      }
+      const redir = await fetch(`${url}/ui`, { redirect: "manual" });
+      expect(redir.status).toBe(302);
+      expect(redir.headers.get("location") ?? "").toContain("/console");
     });
   });
 
@@ -55,21 +79,14 @@ describe("operator desk", () => {
       const denied = await fetch(`${url}/api/operator/jobs`);
       expect(denied.status).toBe(401);
 
-      const bad = await fetch(`${url}/api/operator/login`, {
+      const login = await fetch(`${url}/api/auth/login`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token: "nope" }),
-      });
-      expect(bad.status).toBe(401);
-
-      const login = await fetch(`${url}/api/operator/login`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token: "op-test-token" }),
+        body: JSON.stringify({ username: "admin", password: "password1" }),
       });
       expect(login.status).toBe(200);
       const cookie = cookieFrom(login);
-      expect(cookie.startsWith("carbon_op=")).toBe(true);
+      expect(cookie.startsWith("carbon_user=")).toBe(true);
       const auth = { cookie };
 
       const created = await fetch(`${url}/debug/jobs`, {

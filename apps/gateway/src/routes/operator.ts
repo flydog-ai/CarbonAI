@@ -8,7 +8,6 @@ import { readJsonCapped } from "../http/read-json-capped.ts";
 import { JobEngine } from "../job/engine.ts";
 import { JobConflictError, JobNotFoundError } from "../job/errors.ts";
 import { pageContext } from "../operator/context.ts";
-import { renderOperatorPage } from "../operator/page.ts";
 
 export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, userSessions: UserSessions): Hono {
   const app = new Hono();
@@ -16,13 +15,11 @@ export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, use
 
   const authed = (c: Context): { id: string } | "forbidden" | undefined => {
     const us = userSessions.get(getCookie(c, USER_COOKIE));
-    if (us) {
-      const user = db.users.getById(us.userId);
-      if (!user || user.disabled) return undefined;
-      if (!user.can_reply) return "forbidden";
-      return { id: user.id };
-    }
-    return sessions.get(getCookie(c, OPERATOR_COOKIE));
+    if (!us) return undefined;
+    const user = db.users.getById(us.userId);
+    if (!user || user.disabled) return undefined;
+    if (!user.can_reply) return "forbidden";
+    return { id: user.id };
   };
 
   const requireReply = (c: Context) => {
@@ -30,9 +27,6 @@ export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, use
     if (a === "forbidden") return "forbidden" as const;
     return a;
   };
-
-  app.get("/ui", (c) => c.html(renderOperatorPage()));
-  app.get("/ui/", (c) => c.html(renderOperatorPage()));
 
   app.post("/api/operator/login", async (c) => {
     const body = (await readJsonCapped(c.req.raw, 4096)) as { token?: string };

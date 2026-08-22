@@ -41,7 +41,7 @@ export function estimateRequestTokens(req: NormalizedRequest): number {
   return Math.max(1, sys + msgs);
 }
 
-function isNoiseUserText(text: string): boolean {
+export function isNoiseUserText(text: string): boolean {
   const t = text.trimStart();
   return t.startsWith("<system-reminder>") || t.startsWith("<system-reminder");
 }

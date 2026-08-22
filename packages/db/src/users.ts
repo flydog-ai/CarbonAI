@@ -34,6 +34,10 @@ export class UserRepo {
     return this.sqlite.query("SELECT * FROM users ORDER BY created_at ASC").all() as UserRow[];
   }
 
+  setPasswordHash(id: string, passwordHash: string): void {
+    this.sqlite.query("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, id);
+  }
+
   updateFlags(id: string, patch: { can_reply?: boolean; disabled?: boolean; role?: UserRole }): void {
     const current = this.getById(id);
     if (!current) return;
@@ -68,6 +72,10 @@ export class UserRepo {
 
   revokeKey(id: string, at: number): void {
     this.sqlite.query("UPDATE api_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL").run(at, id);
+  }
+
+  deleteKey(id: string): void {
+    this.sqlite.query("DELETE FROM api_keys WHERE id = ?").run(id);
   }
 }
 

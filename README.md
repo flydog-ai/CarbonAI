@@ -34,17 +34,21 @@ If those clients were unused anyway, it made sense to package myself as a model.
 
 Two protocol families: **Anthropic Messages** (live: `POST /v1/messages`, `GET /v1/models`) and **OpenAI-compatible** Chat Completions / Responses (next, for Codex, DeepSeek-style clients, and similar agents).
 
-Operator desk is at `/ui`. User-system phase 1: register at `/account` for hashed API keys, jobs carry the account (`clientLabel` / `userId`), `can_reply` gates the desk, superadmin at `/admin`. Quotas, billing, and assignable repliers come later. `operator_token` still opens the desk. First start on an empty database prints a superadmin username, password (unless set in `carbon.toml`), and one API key.
+Two doors: **`/`** is for agents (homepage Import uses the **local guest key** from `carbon.toml`, no account). **`/console`** is for humans (setup / login / desk / named keys / users). `/ui`, `/account`, `/admin` redirect to `/console`.
 
-Runtime is **TypeScript** (Bun 1.2+; fall back to Node 22 if abort/SSE spikes fail). No Python.
+Empty database: open `/console` and create the first superadmin. Unattended: `bootstrap_password` in `carbon.toml` or `CARBON_BOOTSTRAP_PASSWORD`. Lost password: first line of `~/.carbon-ai/reset-bootstrap`, then restart or reload `/console`. Quotas, billing, and assignable repliers come later.
+
+Runtime is **TypeScript** (Bun 1.2+; fall back to Node 22 if abort/SSE spikes fail). Console is a Vite + React SPA, built into `apps/console/dist` and served by the same Bun/Hono process at `/console`. No Python.
 
 ## 当前进度
 
 两条协议线：**Anthropic Messages**（已上：`POST /v1/messages`、`GET /v1/models`）和 **OpenAI 兼容** 的 Chat Completions / Responses（接下来做，给 Codex、DeepSeek 类客户端等智能体用）。
 
-操作台在 `/ui`。用户系统第一阶段：`/account` 注册并签发哈希 API key，任务带上账号（`clientLabel` / `userId`），`can_reply` 控制谁能进操作台，超管在 `/admin`。限额、充值、指派回复者以后再做。`operator_token` 仍可进操作台。空库首次启动会打印超管用户名、密码（若未在 `carbon.toml` 里写）和一把 API key。
+两扇门：**`/`** 给智能体（首页 Import 用 `carbon.toml` 里的**本地匿名 key**，不用登录）。**`/console`** 给人（首次建超管 / 登录 / 操作台 / 记名 key / 用户）。`/ui`、`/account`、`/admin` 跳到 `/console`。
 
-运行时是 **TypeScript**（Bun 1.2+；若 abort/SSE 尖峰失败则改 Node 22）。不使用 Python。
+空库：打开 `/console` 创建第一位超管。无人值守：`bootstrap_password` 或 `CARBON_BOOTSTRAP_PASSWORD`。密码丢了：`~/.carbon-ai/reset-bootstrap` 第一行，然后重启或刷新 `/console`。限额、充值、指派回复者以后再做。
+
+运行时是 **TypeScript**（Bun 1.2+；若 abort/SSE 尖峰失败则改 Node 22）。控制台是 Vite + React SPA，编进 `apps/console/dist`，由同一个 Bun/Hono 进程在 `/console` 提供。不使用 Python。
 
 ---
 
@@ -80,11 +84,9 @@ bun start
 
 | Path | English | 中文 |
 |---|---|---|
-| `GET /` | Home; one-click CC Switch import into Claude Code (`ccswitch://`, no `/v1`) | 首页；一键用 CC Switch 导入到 Claude Code（地址不含 `/v1`） |
-| `GET /ui` | Operator desk: inbox, paginated context, text reply | 操作台：收件箱、分页上下文、文本回复 |
-| `GET /account` | Register / sign in / mint API keys | 注册 / 登录 / 签发 API key |
-| `GET /admin` | Superadmin: disable users, grant reply | 超级管理员：禁用用户、授予回复权 |
-| `POST /api/operator/login` | Operator cookie from `operator_token` (legacy) | 用 `operator_token` 换操作者 cookie（兼容） |
+| `GET /` | Home; Import uses the local guest key (`sk-carbon-local`); no account | 首页；Import 用本地匿名 key（`sk-carbon-local`），不用登录 |
+| `GET /console` | People UI: setup, login, keys, desk, users | 给人用的控制台：建超管、登录、密钥、操作台、用户 |
+| `GET /ui` `/account` `/admin` | Redirect to `/console` | 跳到 `/console` |
 | `GET /v1/models` | Model list (client key required; Anthropic shape if `anthropic-version` is set) | 模型列表（要客户端 key；带 `anthropic-version` 时为 Anthropic 形状） |
 | `POST /v1/messages` | Anthropic Messages, SSE or JSON; hangs until the operator `complete`s | Anthropic Messages，SSE 或 JSON；挂起直到操作者 `complete` |
 | `POST /v1/messages/count_tokens` | Heuristic `input_tokens` | 启发式 input_tokens |
@@ -99,11 +101,11 @@ bun start
 
 Config: repo-root `carbon.toml`. Also `CARBON_PORT`, `CARBON_HOST`, `CARBON_DATA_DIR`, `CARBON_CONFIG`, `CARBON_BOOTSTRAP_USERNAME`, `CARBON_BOOTSTRAP_PASSWORD`.
 
-Dev: `bun dev` (watch).
+Dev: `bun dev` (gateway watch + Vite rebuild of the console). `bun start` builds `apps/console/dist` then starts one Bun process.
 
 配置见仓库根目录 `carbon.toml`。也可用 `CARBON_PORT`、`CARBON_HOST`、`CARBON_DATA_DIR`、`CARBON_CONFIG`、`CARBON_BOOTSTRAP_USERNAME`、`CARBON_BOOTSTRAP_PASSWORD`。
 
-开发：`bun dev`（watch）。
+开发：`bun dev`（网关 watch + 控制台 Vite 重建）。`bun start` 先编 `apps/console/dist`，再单进程启动。
 
 ---
 
@@ -111,21 +113,21 @@ Dev: `bun dev` (watch).
 
 Any agent that can set a custom model base URL can point here.
 
-Anthropic-style (e.g. Claude Code): `ANTHROPIC_BASE_URL=http://127.0.0.1:12580` (**do not** append `/v1`), `ANTHROPIC_AUTH_TOKEN=sk-carbon-local`, and a model id such as `claude-sonnet-4-6`. The home-page CC Switch button writes this for Claude Code.
+Anthropic-style (e.g. Claude Code): `ANTHROPIC_BASE_URL=http://127.0.0.1:12580` (**do not** append `/v1`), `ANTHROPIC_AUTH_TOKEN=sk-carbon-local` (local guest key), and a model id such as `claude-sonnet-4-6`. The home-page Import button writes this. Named keys from `/console` identify the caller.
 
 OpenAI-style (e.g. Codex, DeepSeek-compatible clients): `base_url` **does** include `/v1`. The Responses / Chat Completions adapters are not wired yet.
 
-The gateway hangs the SSE until a human replies. Sign in at `/ui` (replier account or `operator_token`) and send from the desk, or `POST /debug/jobs/:id/complete` with `{"text":"…"}`.
+The gateway hangs the SSE until a human replies. Sign in at `/console` with a replier account and send from the desk, or `POST /debug/jobs/:id/complete` with `{"text":"…"}`.
 
 ## 客户端
 
 任何能自定义模型地址的智能体都可以指过来。
 
-Anthropic 风格（如 Claude Code）：`ANTHROPIC_BASE_URL=http://127.0.0.1:12580`（**不要**加 `/v1`），`ANTHROPIC_AUTH_TOKEN=sk-carbon-local`，模型 id 如 `claude-sonnet-4-6`。首页的 CC Switch 按钮会给 Claude Code 写入这些。
+Anthropic 风格（如 Claude Code）：`ANTHROPIC_BASE_URL=http://127.0.0.1:12580`（**不要**加 `/v1`），`ANTHROPIC_AUTH_TOKEN=sk-carbon-local`（本地匿名 key），模型 id 如 `claude-sonnet-4-6`。首页 Import 会写入这些。`/console` 签发的记名 key 用来区分调用方。
 
 OpenAI 风格（如 Codex、DeepSeek 兼容客户端）：`base_url` **要**带 `/v1`。Responses / Chat Completions 适配器还没接。
 
-网关会挂起 SSE 等人回复。到 `/ui` 登录（有回复权的账号或 `operator_token`）在操作台发送，或 `POST /debug/jobs/:id/complete` `{"text":"…"}`。
+网关会挂起 SSE 等人回复。到 `/console` 用有回复权的账号登录，在操作台发送，或 `POST /debug/jobs/:id/complete` `{"text":"…"}`。
 
 ---
 

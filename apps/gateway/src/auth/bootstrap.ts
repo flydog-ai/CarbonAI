@@ -1,18 +1,17 @@
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import type { Config } from "@carbon-ai/config";
 import { newApiKeyId, newUser, type CarbonDb } from "@carbon-ai/db";
 import { apiKeyPrefix, hashApiKey, mintApiKeyPlaintext } from "./client-keys.ts";
 
-function generateSecret(): string {
-  const bytes = new Uint8Array(24);
-  crypto.getRandomValues(bytes);
-  return Buffer.from(bytes).toString("base64url");
-}
-
 export async function ensureBootstrapAdmin(cfg: Config, db: CarbonDb): Promise<void> {
   if (db.users.count() > 0) return;
   const username = cfg.auth.bootstrapUsername || "admin";
-  const password = cfg.auth.bootstrapPassword || generateSecret();
-  const generated = cfg.auth.bootstrapPassword === "";
+  const password = cfg.auth.bootstrapPassword;
+  if (!password) {
+    console.log("no users yet — open /console to create the first superadmin");
+    return;
+  }
   const user = await newUser({ username, password, role: "superadmin", canReply: true });
   db.users.insert(user);
   const plaintext = mintApiKeyPlaintext();
@@ -26,7 +25,27 @@ export async function ensureBootstrapAdmin(cfg: Config, db: CarbonDb): Promise<v
     revoked_at: null,
   });
   console.log(`superadmin username: ${username}`);
-  if (generated) console.log(`superadmin password:\n${password}`);
-  else console.log("superadmin password: (from carbon.toml)");
+  console.log("superadmin password: (from carbon.toml / CARBON_BOOTSTRAP_PASSWORD)");
   console.log(`superadmin api key (shown once):\n${plaintext}`);
+}
+
+/** One-shot: data_dir/reset-bootstrap whose first line is the new password. File is deleted after use. */
+export async function resetBootstrapIfRequested(cfg: Config, db: CarbonDb): Promise<boolean> {
+  const path = join(cfg.server.dataDir, "reset-bootstrap");
+  if (!existsSync(path)) return false;
+  const password = readFileSync(path, "utf8").split(/\r?\n/, 1)[0]?.trim() ?? "";
+  unlinkSync(path);
+  if (password.length < 8) {
+    console.log("reset-bootstrap ignored: password must be at least 8 characters");
+    return false;
+  }
+  const username = cfg.auth.bootstrapUsername || "admin";
+  const user = db.users.getByUsername(username);
+  if (!user) {
+    console.log(`reset-bootstrap ignored: no user named ${username}`);
+    return false;
+  }
+  db.users.setPasswordHash(user.id, await Bun.password.hash(password));
+  console.log(`superadmin password reset for ${user.username} (from data_dir/reset-bootstrap)`);
+  return true;
 }

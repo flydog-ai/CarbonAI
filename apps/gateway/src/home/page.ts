@@ -236,20 +236,25 @@ export function renderHomePage(data: HomePageData): string {
         <dd>${endpoint}</dd>
         <dt>Model</dt>
         <dd>${model}</dd>
-        <dt>Key</dt>
-        <dd>${apiKey}</dd>
+        <dt>Guest key / 匿名 key</dt>
+        <dd>${apiKey || "(none — mint one in the console)"}</dd>
       </dl>
-      <a class="cta" id="cc-switch-import" href="${href}">
+      ${
+        href
+          ? `<a class="cta" id="cc-switch-import" href="${href}">
         Import into Claude Code
-        <small>导入到 Claude Code · CC Switch</small>
-      </a>
-      <p class="hint"><a href="/account">Get an API key / 申请 API key</a> · <a href="/ui">Operator desk / 操作台</a></p>
+        <small>导入到 Claude Code · 本地匿名 key · CC Switch</small>
+      </a>`
+          : `<p class="hint">No local guest key in <code>carbon.toml</code>. Sign in at <a href="/console">/console</a> and mint a user key.<br>toml 里没有本地匿名 key。到 <a href="/console">/console</a> 登录并签发用户 key。</p>`
+      }
+      <p class="hint">This import uses the <strong>local guest key</strong> from <code>carbon.toml</code>. No account. Anyone with the key can open jobs on this gateway.<br>这一键导入用的是 toml 里的<strong>本地匿名 key</strong>，不用登录。拿到这把 key 就能往本机网关丢任务。</p>
+      <p class="hint">If the button does nothing, CC Switch is not installed — copy Base / Key / Model above by hand.<br>点了没反应：多半没装 CC Switch，请手动抄上面的地址、key、模型。</p>
+      <p class="hint"><a href="/console">Console / 控制台</a> — sign in to reply, mint named keys, or manage users. 登录后回复、签发记名 key、管理用户。</p>
       <p class="hint">
-        Requires <a href="https://ccswitch.io" rel="noreferrer">CC Switch</a>. Base URL has no <code>/v1</code>. Confirm the import in CC Switch.
+        Requires <a href="https://ccswitch.io" rel="noreferrer">CC Switch</a> for one-click import. Base URL has no <code>/v1</code>.
       </p>
       <p class="hint">
-        需已安装 <a href="https://ccswitch.io" rel="noreferrer">CC Switch</a>。
-        地址不含 <code>/v1</code>。点按钮后在 CC Switch 里确认导入。
+        一键导入需已安装 <a href="https://ccswitch.io" rel="noreferrer">CC Switch</a>。地址不含 <code>/v1</code>。
       </p>
     </aside>
   </main>

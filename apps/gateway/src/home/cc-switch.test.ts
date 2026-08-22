@@ -40,10 +40,11 @@ describe("buildCcSwitchClaudeImportHref", () => {
 
   test("always includes apiKey; falls back to local key", () => {
     expect(clientApiKey(DEFAULT_CONFIG)).toBe(LOCAL_API_KEY);
+    expect(clientApiKey(DEFAULT_CONFIG, true)).toBeUndefined();
     const href = buildCcSwitchClaudeImportHref({
       name: "Carbon AI",
       endpoint: "http://127.0.0.1:12580",
-      apiKey: clientApiKey(DEFAULT_CONFIG),
+      apiKey: clientApiKey(DEFAULT_CONFIG) ?? LOCAL_API_KEY,
       model: "carbon-default",
     });
     const qs = new URLSearchParams(href.slice("ccswitch://v1/import?".length));

@@ -6,8 +6,9 @@
   "description": "Carbon AI — wrap a human operator as a drop-in Anthropic/OpenAI-compatible model API. The gateway does not call any LLM. 碳基智能：把人工操作者包装成可直接调用的模型 API。网关不调用任何 LLM。",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "bun --watch apps/gateway/src/index.ts",
-    "start": "bun apps/gateway/src/index.ts",
+    "dev": "bun scripts/dev.ts",
+    "start": "bun run console:build && bun apps/gateway/src/index.ts",
+    "console:build": "bun run --cwd apps/console build",
     "test": "bun test"
   },
   "engines": {

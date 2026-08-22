@@ -23,7 +23,8 @@ export {
 export { fold } from "./fold.ts";
 export { eventsFromBlocks } from "./events-from-blocks.ts";
 export { ids, sha256Hex, ulid } from "./ids.ts";
-export { estimateRequestTokens, estimateTextTokens, lastUserPreview, toolNames } from "./tokens.ts";
+export { estimateRequestTokens, estimateTextTokens, isNoiseUserText, lastUserPreview, toolNames } from "./tokens.ts";
+export { conversationTurns, isConversationContinuation } from "./thread.ts";
 export { AnthropicAdapter } from "./adapters/anthropic.ts";
 export { normalizeAnthropicRequest } from "./normalize/anthropic.ts";
 export { anthropicError, AnthropicRequestError } from "./errors/anthropic.ts";

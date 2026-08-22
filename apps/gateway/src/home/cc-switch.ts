@@ -25,9 +25,17 @@ export function preferLoopbackOrigin(requestUrl: string): string {
   return url.origin;
 }
 
-export function clientApiKey(cfg: Config): string {
-  const key = cfg.auth.apiKeys[0]?.key?.trim();
-  return key ? key : LOCAL_API_KEY;
+export function guestApiKeyFromToml(cfg: Config): string | undefined {
+  const key = cfg.auth.apiKeys.find((k) => k.key.trim())?.key.trim();
+  return key || undefined;
+}
+
+/** Toml guest key, or local fallback when no user database is attached. */
+export function clientApiKey(cfg: Config, hasUserDirectory = false): string | undefined {
+  const guest = guestApiKeyFromToml(cfg);
+  if (guest) return guest;
+  if (hasUserDirectory) return undefined;
+  return LOCAL_API_KEY;
 }
 
 /**

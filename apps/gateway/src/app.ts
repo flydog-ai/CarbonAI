@@ -14,6 +14,7 @@ import { modelsRoutes } from "./routes/models.ts";
 import { anthropicRoutes } from "./routes/anthropic.ts";
 import { debugRoutes } from "./routes/debug.ts";
 import { debugJobRoutes } from "./routes/debug-jobs.ts";
+import { consoleRoutes } from "./routes/console.ts";
 import { operatorRoutes } from "./routes/operator.ts";
 
 export type AppDeps = {
@@ -30,14 +31,15 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Hono {
   const app = new Hono();
   const sessions = deps.sessions ?? new HangRegistry();
 
-  app.route("/", homeRoutes(cfg));
+  app.route("/", consoleRoutes());
+  app.route("/", homeRoutes(cfg, deps.db));
   app.route("/", healthRoutes());
   app.route("/", helloRoutes());
   app.route("/", modelsRoutes(cfg, deps.db));
   app.route("/", debugRoutes(sessions));
   if (deps.engine && deps.db) {
     const userSessions = new UserSessions();
-    app.route("/", authRoutes(deps.db, userSessions));
+    app.route("/", authRoutes(cfg, deps.db, userSessions));
     app.route("/", adminRoutes(deps.db, userSessions));
     app.route("/", operatorRoutes(cfg, deps.engine, deps.db, userSessions));
     app.route("/", anthropicRoutes(cfg, deps.engine, deps.db));

@@ -136,7 +136,13 @@ describe("HTTP smoke (real listen)", () => {
     expect(html).toContain(encodeURIComponent(srv.url4));
     expect(html).toContain("apiKey=");
     expect(html).toContain("sk-carbon-local");
+    expect(html).toContain("Guest key");
+    expect(html).toContain("/console");
     expect(html).not.toContain(encodeURIComponent(`${srv.url4}/v1`));
+    const consolePage = await fetch(`${srv.url4}/console`);
+    expect(consolePage.status).toBe(200);
+    expect(consolePage.headers.get("content-type") ?? "").toContain("text/html");
+    expect(await consolePage.text()).toContain("Console");
   });
 
   test("HEAD and GET /api/hello are 200 empty", async () => {
