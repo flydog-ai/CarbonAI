@@ -1,4 +1,5 @@
 import type { ContentPart, NormalizedMessage, NormalizedRequest } from "./events.ts";
+import { splitMarkup } from "./markup.ts";
 
 export function estimateTextTokens(text: string): number {
   let n = 0;
@@ -46,6 +47,17 @@ export function isNoiseUserText(text: string): boolean {
   return t.startsWith("<system-reminder>") || t.startsWith("<system-reminder");
 }
 
+/** User-visible text after stripping agent angle tags such as system-reminder. */
+export function visibleUserText(text: string): string {
+  const leftover = splitMarkup(text)
+    .filter((s) => s.kind === "text" && s.text.trim())
+    .map((s) => s.text.trim())
+    .join("\n");
+  if (leftover) return leftover;
+  if (!text || isNoiseUserText(text)) return "";
+  return text;
+}
+
 export function lastUserPreview(req: NormalizedRequest, max = 200): string {
   for (let i = req.messages.length - 1; i >= 0; i--) {
     const m = req.messages[i];
@@ -54,8 +66,9 @@ export function lastUserPreview(req: NormalizedRequest, max = 200): string {
       .filter((p): p is { type: "text"; text: string } => p.type === "text")
       .map((p) => p.text)
       .join("\n");
-    if (!text || isNoiseUserText(text)) continue;
-    return text.length <= max ? text : text.slice(0, max);
+    const usable = visibleUserText(text);
+    if (!usable) continue;
+    return usable.length <= max ? usable : usable.slice(0, max);
   }
   return "";
 }

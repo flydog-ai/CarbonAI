@@ -1,21 +1,35 @@
-import { estimateTextTokens, type ContentPart, type NormalizedRequest } from "@carbon-ai/protocol";
+import {
+  estimateTextTokens,
+  isMetaTag,
+  splitMarkup,
+  type AssistantOutput,
+  type ContentPart,
+  type NormalizedRequest,
+} from "@carbon-ai/protocol";
 
-const EXCERPT = 500;
+const SYS_EXCERPT = 500;
 const INLINE_LIMIT = 8 * 1024;
+
+export type ContextLane = "system" | "user" | "assistant" | "tool" | "meta";
 
 export type ContextBlock = {
   index: number;
   role: "system" | "developer" | "user" | "assistant" | "tool";
   kind: string;
+  lane: ContextLane;
+  title?: string;
   collapsed: boolean;
   excerpt: string;
   tokenEst: number;
   truncated: boolean;
+  source: "request" | "reply";
 };
 
 export type ContextPage = {
   jobId: string;
+  system: ContextBlock[];
   blocks: ContextBlock[];
+  reply: ContextBlock[];
   nextCursor: string | null;
   hasMore: boolean;
   total: number;
@@ -44,62 +58,158 @@ function textOf(part: ContentPart): string {
   }
 }
 
-function toBlock(
+function clip(raw: string, max: number): { excerpt: string; truncated: boolean } {
+  const truncated = raw.length > max;
+  return { excerpt: truncated ? raw.slice(0, max) : raw, truncated };
+}
+
+function laneFor(role: ContextBlock["role"], kind: string): ContextLane {
+  if (kind === "tools") return "system";
+  if (isMetaTag(kind)) return "meta";
+  if (role === "system" || role === "developer") return "system";
+  if (role === "tool" || kind === "tool_use" || kind === "tool_result") return "tool";
+  if (role === "assistant") return "assistant";
+  return "user";
+}
+
+function makeBlock(
   index: number,
   role: ContextBlock["role"],
-  part: ContentPart,
-  collapsed: boolean,
+  kind: string,
+  raw: string,
+  opts: { collapsed?: boolean; title?: string; source?: "request" | "reply"; max?: number } = {},
 ): ContextBlock {
-  const raw = textOf(part);
-  const truncated = raw.length > INLINE_LIMIT || raw.length > EXCERPT;
+  const max = opts.max ?? (laneFor(role, kind) === "user" || laneFor(role, kind) === "assistant" ? INLINE_LIMIT : SYS_EXCERPT);
+  const { excerpt, truncated } = clip(raw, Math.min(max, INLINE_LIMIT));
   return {
     index,
     role,
-    kind: part.type,
-    collapsed,
-    excerpt: truncated ? raw.slice(0, EXCERPT) : raw,
+    kind,
+    lane: laneFor(role, kind),
+    title: opts.title,
+    collapsed: opts.collapsed ?? (laneFor(role, kind) === "system" || laneFor(role, kind) === "meta"),
+    excerpt,
     tokenEst: estimateTextTokens(raw),
     truncated,
+    source: opts.source ?? "request",
   };
 }
 
-export function flattenContext(req: NormalizedRequest): ContextBlock[] {
+function pushText(
+  blocks: ContextBlock[],
+  role: ContextBlock["role"],
+  part: ContentPart,
+  collapsed: boolean,
+  source: "request" | "reply",
+): void {
+  if (part.type !== "text") {
+    const kind = part.type;
+    const roleForPart: ContextBlock["role"] =
+      kind === "tool_result" ? "tool" : kind === "tool_use" ? "assistant" : role;
+    blocks.push(
+      makeBlock(blocks.length, roleForPart, kind, textOf(part), {
+        collapsed: kind === "thinking" || kind === "reasoning" || collapsed,
+        source,
+      }),
+    );
+    return;
+  }
+  const segs = splitMarkup(part.text);
+  const onlyPlain = segs.length === 1 && segs[0]?.kind === "text";
+  if (onlyPlain) {
+    blocks.push(makeBlock(blocks.length, role, "text", part.text, { collapsed, source }));
+    return;
+  }
+  for (const seg of segs) {
+    if (seg.kind === "text") {
+      const body = seg.text.replace(/^\n+|\n+$/g, "");
+      if (!body.trim()) continue;
+      blocks.push(makeBlock(blocks.length, role, "text", body, { collapsed: false, source }));
+      continue;
+    }
+    const name = seg.name ?? "tag";
+    const meta = isMetaTag(name);
+    blocks.push(
+      makeBlock(blocks.length, meta ? "system" : role, name, seg.text.replace(/^\n+|\n+$/g, ""), {
+        collapsed: meta,
+        title: name,
+        source,
+      }),
+    );
+  }
+}
+
+export function flattenSystem(req: NormalizedRequest): ContextBlock[] {
   const blocks: ContextBlock[] = [];
-  const push = (role: ContextBlock["role"], part: ContentPart, collapsed: boolean): void => {
-    blocks.push(toBlock(blocks.length, role, part, collapsed));
-  };
-  for (const part of req.system) push("system", part, true);
+  for (const part of req.system) pushText(blocks, "system", part, true, "request");
   if (req.tools.length > 0) {
     const names = req.tools.map((t) => ("name" in t ? t.name : t.kind)).join(", ");
-    blocks.push({
-      index: blocks.length,
-      role: "system",
-      kind: "tools",
-      collapsed: true,
-      excerpt: names,
-      tokenEst: estimateTextTokens(names),
-      truncated: false,
-    });
-  }
-  for (const msg of req.messages) {
-    const collapsed = msg.role === "system" || msg.role === "developer";
-    for (const part of msg.parts) push(msg.role, part, collapsed);
+    blocks.push(makeBlock(blocks.length, "system", "tools", names, { collapsed: true, title: "tools" }));
   }
   return blocks;
 }
 
-export function pageContext(jobId: string, req: NormalizedRequest, cursor: string, limit: number): ContextPage {
-  const all = flattenContext(req);
+export function flattenMessages(req: NormalizedRequest): ContextBlock[] {
+  const blocks: ContextBlock[] = [];
+  for (const msg of req.messages) {
+    const collapsed = msg.role === "system" || msg.role === "developer";
+    for (const part of msg.parts) pushText(blocks, msg.role, part, collapsed, "request");
+  }
+  return blocks;
+}
+
+export function flattenReply(output: AssistantOutput | undefined): ContextBlock[] {
+  if (!output?.blocks.length) return [];
+  const blocks: ContextBlock[] = [];
+  for (const b of output.blocks) {
+    if (b.type === "text") {
+      pushText(blocks, "assistant", b, false, "reply");
+    } else if (b.type === "thinking") {
+      blocks.push(makeBlock(blocks.length, "assistant", "thinking", b.thinking, { collapsed: true, source: "reply" }));
+    } else if (b.type === "reasoning") {
+      blocks.push(
+        makeBlock(blocks.length, "assistant", "reasoning", b.summary.map((s) => s.text).join("\n"), {
+          collapsed: true,
+          source: "reply",
+        }),
+      );
+    } else {
+      blocks.push(
+        makeBlock(blocks.length, "assistant", "tool_use", `${b.name ?? b.kind} ${JSON.stringify(b.payload)}`, {
+          source: "reply",
+        }),
+      );
+    }
+  }
+  return blocks;
+}
+
+export function flattenContext(req: NormalizedRequest, output?: AssistantOutput): ContextBlock[] {
+  return [...flattenSystem(req), ...flattenMessages(req), ...flattenReply(output)];
+}
+
+export function pageContext(
+  jobId: string,
+  req: NormalizedRequest,
+  cursor: string,
+  limit: number,
+  output?: AssistantOutput,
+): ContextPage {
+  const system = flattenSystem(req);
+  const chat = flattenMessages(req);
+  const reply = flattenReply(output);
   const start = Math.max(0, Number.parseInt(cursor || "0", 10) || 0);
   const size = Math.min(100, Math.max(1, limit));
-  const slice = all.slice(start, start + size);
+  const slice = chat.slice(start, start + size);
   const end = start + slice.length;
-  const hasMore = end < all.length;
+  const hasMore = end < chat.length;
   return {
     jobId,
+    system,
     blocks: slice,
+    reply: hasMore ? [] : reply,
     nextCursor: hasMore ? String(end) : null,
     hasMore,
-    total: all.length,
+    total: chat.length,
   };
 }

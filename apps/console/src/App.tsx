@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorKey, jsonBody } from "./api.ts";
 import {
   IconChat,
@@ -15,7 +15,7 @@ import {
 } from "./components.tsx";
 import { detectLang, translate } from "./i18n.ts";
 import { copyText, fmtWhen, groupThreads, isLive, readView, secretPrefix, setViewUrl } from "./lib.ts";
-import type { ApiKey, ConnectInfo, ContextBlock, GuestKey, Job, Lang, User, View } from "./types.ts";
+import type { ApiKey, ConnectInfo, ContextBlock, ContextPage, GuestKey, Job, Lang, User, View } from "./types.ts";
 
 type Gate = "boot" | "setup" | "login" | "app";
 
@@ -559,6 +559,60 @@ function Stat({ k, v, h }: { k: string; v: string | number; h?: string }) {
   );
 }
 
+function tagLabel(t: (k: string, v?: Record<string, string | number>) => string, kind?: string): string {
+  if (!kind || kind === "text") return "";
+  const key = `tag.${kind}`;
+  const label = t(key);
+  return label !== key ? label : kind.replaceAll("_", " ").replaceAll("-", " ");
+}
+
+function BlockBody({ block }: { block: ContextBlock }) {
+  return <pre>{block.excerpt}{block.truncated ? "…" : ""}</pre>;
+}
+
+function ChatItem({
+  block,
+  t,
+}: {
+  block: ContextBlock;
+  t: (k: string, v?: Record<string, string | number>) => string;
+}) {
+  const lane = block.lane || (block.role === "assistant" ? "assistant" : block.role === "user" ? "user" : "system");
+  const mine = block.source === "reply";
+  const title =
+    mine
+      ? t("desk.you")
+      : tagLabel(t, block.title || (block.kind && block.kind !== "text" ? block.kind : undefined)) ||
+        (t(`blk.${block.role}`) !== `blk.${block.role}` ? t(`blk.${block.role}`) : block.role);
+  const extra = block.truncated ? ` · ${t("desk.truncated")}` : "";
+
+  if (lane === "system" || lane === "meta" || lane === "tool") {
+    return (
+      <article className={`msg meta lane-${lane}${block.collapsed ? " collapsed" : ""}`}>
+        <button
+          type="button"
+          className="msg-head"
+          onClick={(e) => e.currentTarget.parentElement?.classList.toggle("collapsed")}
+        >
+          {title}{extra}
+        </button>
+        <BlockBody block={block} />
+      </article>
+    );
+  }
+
+  return (
+    <article className={`msg ${lane}${mine ? " you" : ""}`}>
+      <div className="msg-head">
+        {title}
+        {block.kind && block.kind !== "text" && lane === "assistant" ? ` · ${block.kind}` : ""}
+        {extra}
+      </div>
+      <BlockBody block={block} />
+    </article>
+  );
+}
+
 function Sessions({
   t,
   canDesk,
@@ -570,12 +624,15 @@ function Sessions({
 }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [system, setSystem] = useState<ContextBlock[]>([]);
   const [blocks, setBlocks] = useState<ContextBlock[]>([]);
+  const [you, setYou] = useState<ContextBlock[]>([]);
   const [cursor, setCursor] = useState("0");
   const [hasMore, setHasMore] = useState(false);
-  const [reply, setReply] = useState("");
+  const [draft, setDraft] = useState("");
   const [err, setErr] = useState("");
   const [head, setHead] = useState<Job | null>(null);
+  const scroller = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     if (!canDesk) return;
@@ -590,22 +647,28 @@ function Sessions({
     return () => window.clearInterval(id);
   }, [canDesk, refresh]);
 
-  async function openJob(id: string, reset = true) {
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [blocks, you, selected]);
+
+  async function openJob(id: string, reset = true, fromCursor?: string) {
     setSelected(id);
     setErr("");
-    if (reset) {
-      setBlocks([]);
-      setCursor("0");
-    }
     const meta = await api<Job>(`/api/operator/jobs/${id}`);
     if (meta.res.ok) setHead(meta.body);
-    const page = await api<{ blocks?: ContextBlock[]; nextCursor?: string; hasMore?: boolean }>(
-      `/api/operator/jobs/${id}/context?cursor=${encodeURIComponent(reset ? "0" : cursor)}&limit=20`,
+    const cur = reset ? "0" : (fromCursor ?? cursor);
+    const page = await api<ContextPage>(
+      `/api/operator/jobs/${id}/context?cursor=${encodeURIComponent(cur)}&limit=50`,
     );
     if (!page.res.ok) return;
-    setBlocks((prev) => (reset ? page.body.blocks || [] : prev.concat(page.body.blocks || [])));
-    setCursor(page.body.nextCursor || "0");
-    setHasMore(Boolean(page.body.hasMore));
+    const next = page.body;
+    if (reset) setSystem(next.system || []);
+    setBlocks((prev) => (reset ? next.blocks || [] : prev.concat(next.blocks || [])));
+    setYou(next.reply || []);
+    setCursor(next.nextCursor || "0");
+    setHasMore(Boolean(next.hasMore));
     await refresh();
   }
 
@@ -615,14 +678,14 @@ function Sessions({
       setErr(t("desk.pickFirst"));
       return;
     }
-    const text = reply.trim();
+    const text = draft.trim();
     if (!text) return;
     const { res, body } = await api<{ error?: string }>(`/api/operator/jobs/${selected}/complete`, jsonBody({ text }));
     if (!res.ok) {
       setErr(body.error || t("desk.sendFailed"));
       return;
     }
-    setReply("");
+    setDraft("");
     await openJob(selected, true);
   }
 
@@ -630,6 +693,7 @@ function Sessions({
   const live = threads.filter(isLive);
   const rest = threads.filter((j) => !live.includes(j)).slice(0, 24);
   const rows = live.concat(rest);
+  const emptyChat = !blocks.length && !you.length && !system.length;
 
   if (!canDesk) {
     return (
@@ -658,27 +722,40 @@ function Sessions({
       </aside>
       <div className="work">
         <header className="work-head">
-          <p className="sub" style={{ margin: 0 }}>{head?.threadId || head?.id || t("desk.select")}</p>
+          <p className="sub" style={{ margin: 0 }}>
+            {head ? `${t("desk.client")} · ${head.clientLabel || "—"}` : t("desk.select")}
+            {head?.threadId ? ` · ${head.threadId}` : ""}
+          </p>
           <h1>
             {head ? <><Pill status={head.status} label={statusLabel(head.status)} /> {head.displayModel || head.model}</> : t("desk.inbox")}
           </h1>
         </header>
-        <div className="ctx">
-          {blocks.length ? blocks.map((b, i) => (
-            <article key={i} className={`blk${b.collapsed ? " collapsed" : ""}`} onClick={(e) => {
-              if (b.collapsed) (e.currentTarget as HTMLElement).classList.toggle("collapsed");
-            }}>
-              <div className="who">{t(`blk.${b.role}`) !== `blk.${b.role}` ? t(`blk.${b.role}`) : b.role}{b.kind && b.kind !== "text" ? ` · ${b.kind}` : ""}{b.truncated ? ` · ${t("desk.truncated")}` : ""}</div>
-              <pre>{b.excerpt}</pre>
-            </article>
-          )) : <p className="empty">{t("desk.emptyLive")}</p>}
-          {hasMore ? <button className="btn btn-secondary btn-sm" type="button" onClick={() => selected && void openJob(selected, false)}>{t("desk.loadMore")}</button> : null}
+        <div className="ctx" ref={scroller}>
+          {system.length ? (
+            <details className="sys-pack">
+              <summary>
+                {t("desk.systemPack")}
+                <span>{t("desk.systemPackHint", { n: system.length })}</span>
+              </summary>
+              {system.map((b, i) => <ChatItem key={`sys-${i}`} block={b} t={t} />)}
+            </details>
+          ) : null}
+          {emptyChat && !head ? <p className="empty">{t("desk.emptyLive")}</p> : null}
+          <div className="transcript">
+            {blocks.map((b, i) => <ChatItem key={`m-${i}`} block={b} t={t} />)}
+            {you.map((b, i) => <ChatItem key={`y-${i}`} block={b} t={t} />)}
+          </div>
+          {hasMore ? (
+            <button className="btn btn-secondary btn-sm" type="button" onClick={() => selected && void openJob(selected, false, cursor)}>
+              {t("desk.loadMore")}
+            </button>
+          ) : null}
         </div>
         <footer className="composer">
           <textarea
-            value={reply}
+            value={draft}
             placeholder={t("desk.placeholder")}
-            onChange={(e) => setReply(e.target.value)}
+            onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void sendReply();
             }}
@@ -695,7 +772,7 @@ function Sessions({
           >{t("desk.cancel")}</button>
         </footer>
       </div>
-      {err ? <p className="err">{err}</p> : null}
+      {err ? <p className="err desk-err">{err}</p> : null}
     </div>
   );
 }

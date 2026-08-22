@@ -42,7 +42,19 @@ export type Job = {
 export type ContextBlock = {
   role: string;
   kind?: string;
+  lane?: "system" | "user" | "assistant" | "tool" | "meta";
+  title?: string;
   excerpt: string;
   collapsed?: boolean;
   truncated?: boolean;
+  source?: "request" | "reply";
+};
+
+export type ContextPage = {
+  system?: ContextBlock[];
+  blocks?: ContextBlock[];
+  reply?: ContextBlock[];
+  nextCursor?: string | null;
+  hasMore?: boolean;
+  total?: number;
 };

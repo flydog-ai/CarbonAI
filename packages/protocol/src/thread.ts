@@ -1,5 +1,5 @@
 import type { NormalizedMessage, NormalizedRequest } from "./events.ts";
-import { isNoiseUserText } from "./tokens.ts";
+import { visibleUserText } from "./tokens.ts";
 
 export type ConversationTurn = {
   role: string;
@@ -18,7 +18,12 @@ export function conversationTurns(req: NormalizedRequest): ConversationTurn[] {
   const out: ConversationTurn[] = [];
   for (const m of req.messages) {
     const text = messageText(m);
-    if (m.role === "user" && isNoiseUserText(text)) continue;
+    if (m.role === "user") {
+      const vis = visibleUserText(text);
+      if (!vis) continue;
+      out.push({ role: m.role, text: vis });
+      continue;
+    }
     out.push({ role: m.role, text });
   }
   return out;

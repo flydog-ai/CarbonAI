@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { emptyNormalizedRequest } from "@carbon-ai/protocol";
-import { flattenContext, pageContext } from "./context.ts";
+import { flattenContext, flattenMessages, pageContext } from "./context.ts";
 
 describe("operator context", () => {
   test("system first, collapsed, then user text", () => {
@@ -11,23 +11,65 @@ describe("operator context", () => {
     });
     const blocks = flattenContext(req);
     expect(blocks[0]?.role).toBe("system");
+    expect(blocks[0]?.lane).toBe("system");
     expect(blocks[0]?.collapsed).toBe(true);
     expect(blocks.some((b) => b.kind === "tools" && b.excerpt.includes("Bash"))).toBe(true);
     expect(blocks.at(-1)?.excerpt).toBe("hello");
+    expect(blocks.at(-1)?.lane).toBe("user");
   });
 
-  test("pages with opaque decimal cursor", () => {
+  test("pages messages without counting the system pack", () => {
     const req = emptyNormalizedRequest({
+      system: [{ type: "text", text: "huge system prompt" }],
       messages: [
         { role: "user", parts: [{ type: "text", text: "a" }, { type: "text", text: "b" }, { type: "text", text: "c" }] },
       ],
     });
     const p1 = pageContext("job_x", req, "0", 2);
+    expect(p1.system.some((b) => b.excerpt.includes("huge system prompt"))).toBe(true);
     expect(p1.blocks).toHaveLength(2);
+    expect(p1.blocks[0]?.excerpt).toBe("a");
     expect(p1.hasMore).toBe(true);
     expect(p1.nextCursor).toBe("2");
     const p2 = pageContext("job_x", req, p1.nextCursor ?? "2", 2);
     expect(p2.blocks[0]?.excerpt).toBe("c");
     expect(p2.hasMore).toBe(false);
+  });
+
+  test("system-reminder is meta, leftover text is the user bubble", () => {
+    const req = emptyNormalizedRequest({
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "text",
+              text: "<system-reminder>\nDo not mention this.\n</system-reminder>\nplease fix the login",
+            },
+          ],
+        },
+      ],
+    });
+    const chat = flattenMessages(req);
+    expect(chat.some((b) => b.lane === "meta" && b.kind === "system-reminder")).toBe(true);
+    expect(chat.some((b) => b.lane === "user" && b.excerpt.includes("please fix the login"))).toBe(true);
+  });
+
+  test("operator reply is an assistant bubble with source reply", () => {
+    const req = emptyNormalizedRequest({
+      messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }],
+    });
+    const page = pageContext("job_x", req, "0", 20, {
+      vendorMessageId: "msg_1",
+      model: "carbon-default",
+      createdAt: 1,
+      blocks: [{ type: "text", text: "pong from desk" }],
+      stopReason: "end_turn",
+      inputTokens: 1,
+      outputTokens: 3,
+    });
+    expect(page.reply[0]?.lane).toBe("assistant");
+    expect(page.reply[0]?.source).toBe("reply");
+    expect(page.reply[0]?.excerpt).toBe("pong from desk");
   });
 });

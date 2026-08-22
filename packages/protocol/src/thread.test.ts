@@ -14,10 +14,20 @@ function req(messages: { role: "user" | "assistant"; text: string }[]) {
 describe("conversationTurns", () => {
   test("drops system-reminder user blocks", () => {
     const n = req([
-      { role: "user", text: "<system-reminder>\nhide me\n" },
+      { role: "user", text: "<system-reminder>\nhide me\n</system-reminder>" },
       { role: "user", text: "hello" },
     ]);
     expect(conversationTurns(n).map((t) => t.text)).toEqual(["hello"]);
+  });
+
+  test("keeps the user sentence after a system-reminder", () => {
+    const n = req([
+      {
+        role: "user",
+        text: "<system-reminder>\nhide me\n</system-reminder>\nplease fix the login form",
+      },
+    ]);
+    expect(conversationTurns(n).map((t) => t.text)).toEqual(["please fix the login form"]);
   });
 });
 

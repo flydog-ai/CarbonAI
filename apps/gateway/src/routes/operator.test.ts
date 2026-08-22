@@ -118,6 +118,11 @@ describe("operator desk", () => {
       expect(done.status).toBe(200);
       const out = (await done.json()) as { blocks: { text?: string }[] };
       expect(out.blocks.some((b) => b.text === "pong from desk")).toBe(true);
+      const after = await fetch(`${url}/api/operator/jobs/${job.id}/context?limit=50`, { headers: auth });
+      const afterPage = (await after.json()) as {
+        reply: { excerpt: string; lane: string; source: string }[];
+      };
+      expect(afterPage.reply.some((b) => b.excerpt === "pong from desk" && b.lane === "assistant" && b.source === "reply")).toBe(true);
       const sseRes = await sse;
       expect(sseRes.status).toBe(200);
       expect(await sseRes.text()).toContain("pong from desk");
