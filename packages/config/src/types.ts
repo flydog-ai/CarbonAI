@@ -22,6 +22,8 @@ export type Config = {
   auth: {
     operatorToken: string;
     apiKeys: ApiKey[];
+    bootstrapUsername: string;
+    bootstrapPassword: string;
   };
   jobs: {
     maxPending: number;
@@ -68,6 +70,8 @@ export const DEFAULT_CONFIG: Config = {
   auth: {
     operatorToken: "",
     apiKeys: [],
+    bootstrapUsername: "admin",
+    bootstrapPassword: "",
   },
   jobs: {
     maxPending: 16,

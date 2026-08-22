@@ -62,6 +62,26 @@ heartbeat = "both"
     expect(cfg.auth.apiKeys).toEqual([{ label: "Claude Code", key: "sk:with:colons" }]);
   });
 
+  test("bootstrap username and password from toml and env", () => {
+    const dir = mkdtempSync(join(tmpdir(), "carbon-cfg-"));
+    writeFileSync(
+      join(dir, "carbon.toml"),
+      `
+[auth]
+bootstrap_username = "root"
+bootstrap_password = "fromfile"
+`,
+      "utf8",
+    );
+    const cfg = loadConfig({
+      cwd: dir,
+      env: { CARBON_BOOTSTRAP_PASSWORD: "fromenv" },
+      generateOperatorTokenIfEmpty: false,
+    });
+    expect(cfg.auth.bootstrapUsername).toBe("root");
+    expect(cfg.auth.bootstrapPassword).toBe("fromenv");
+  });
+
   test("CARBON_CONFIG points at an explicit file", () => {
     const dir = mkdtempSync(join(tmpdir(), "carbon-cfg-"));
     mkdirSync(join(dir, "nested"), { recursive: true });

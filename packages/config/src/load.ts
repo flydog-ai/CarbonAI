@@ -21,6 +21,8 @@ type TomlFile = {
   auth?: {
     operator_token?: string;
     api_keys?: ApiKey[];
+    bootstrap_username?: string;
+    bootstrap_password?: string;
   };
   jobs?: {
     max_pending?: number;
@@ -125,6 +127,12 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
   if (file.auth) {
     if (typeof file.auth.operator_token === "string") cfg.auth.operatorToken = file.auth.operator_token;
     if (Array.isArray(file.auth.api_keys)) cfg.auth.apiKeys = file.auth.api_keys;
+    if (typeof file.auth.bootstrap_username === "string" && file.auth.bootstrap_username) {
+      cfg.auth.bootstrapUsername = file.auth.bootstrap_username;
+    }
+    if (typeof file.auth.bootstrap_password === "string") {
+      cfg.auth.bootstrapPassword = file.auth.bootstrap_password;
+    }
   }
   if (file.jobs) {
     const j = file.jobs;
@@ -175,6 +183,8 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
   if (env.CARBON_DATA_DIR) cfg.server.dataDir = env.CARBON_DATA_DIR;
   if (env.CARBON_OPERATOR_TOKEN) cfg.auth.operatorToken = env.CARBON_OPERATOR_TOKEN;
   if (env.CARBON_API_KEYS) cfg.auth.apiKeys = parseApiKeysJson(env.CARBON_API_KEYS);
+  if (env.CARBON_BOOTSTRAP_USERNAME) cfg.auth.bootstrapUsername = env.CARBON_BOOTSTRAP_USERNAME;
+  if (env.CARBON_BOOTSTRAP_PASSWORD) cfg.auth.bootstrapPassword = env.CARBON_BOOTSTRAP_PASSWORD;
 
   cfg.server.dataDir = expandHome(cfg.server.dataDir);
 

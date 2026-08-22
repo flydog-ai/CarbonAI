@@ -7,6 +7,7 @@ import {
   estimateRequestTokens,
   normalizeAnthropicRequest,
 } from "@carbon-ai/protocol";
+import type { CarbonDb } from "@carbon-ai/db";
 import { presentedClientKey, verifyClientKey } from "../auth/client-keys.ts";
 import { openSse } from "../http/sse-pipe.ts";
 import { readBytesCapped } from "../http/read-json-capped.ts";
@@ -21,11 +22,11 @@ function headersOf(req: Request): Record<string, string> {
   return out;
 }
 
-export function anthropicRoutes(cfg: Config, engine: JobEngine): Hono {
+export function anthropicRoutes(cfg: Config, engine: JobEngine, db?: CarbonDb): Hono {
   const app = new Hono();
 
   const clientOr401 = (c: { req: { raw: Request } }) => {
-    const id = verifyClientKey(cfg, presentedClientKey(c.req.raw.headers));
+    const id = verifyClientKey(cfg, presentedClientKey(c.req.raw.headers), db);
     if (!id) return undefined;
     return id;
   };
@@ -70,6 +71,7 @@ export function anthropicRoutes(cfg: Config, engine: JobEngine): Hono {
         adapter: new AnthropicAdapter(),
         clientKeyId: client.keyId,
         clientLabel: client.label,
+        userId: client.userId,
       });
       console.log(
         `job ${summary.id} ${normalized.stream ? "streaming" : "json"} model=${normalized.model} — complete: POST /debug/jobs/${summary.id}/complete`,

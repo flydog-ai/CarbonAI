@@ -2,17 +2,34 @@ import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Config } from "@carbon-ai/config";
 import { OPERATOR_COOKIE, OperatorSessions } from "../auth/operator-session.ts";
+import { USER_COOKIE, UserSessions } from "../auth/user-session.ts";
+import type { CarbonDb } from "@carbon-ai/db";
 import { readJsonCapped } from "../http/read-json-capped.ts";
 import { JobEngine } from "../job/engine.ts";
 import { JobConflictError, JobNotFoundError } from "../job/errors.ts";
 import { pageContext } from "../operator/context.ts";
 import { renderOperatorPage } from "../operator/page.ts";
 
-export function operatorRoutes(cfg: Config, engine: JobEngine): Hono {
+export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, userSessions: UserSessions): Hono {
   const app = new Hono();
   const sessions = new OperatorSessions(cfg.auth.operatorToken);
 
-  const authed = (c: Context) => sessions.get(getCookie(c, OPERATOR_COOKIE));
+  const authed = (c: Context): { id: string } | "forbidden" | undefined => {
+    const us = userSessions.get(getCookie(c, USER_COOKIE));
+    if (us) {
+      const user = db.users.getById(us.userId);
+      if (!user || user.disabled) return undefined;
+      if (!user.can_reply) return "forbidden";
+      return { id: user.id };
+    }
+    return sessions.get(getCookie(c, OPERATOR_COOKIE));
+  };
+
+  const requireReply = (c: Context) => {
+    const a = authed(c);
+    if (a === "forbidden") return "forbidden" as const;
+    return a;
+  };
 
   app.get("/ui", (c) => c.html(renderOperatorPage()));
   app.get("/ui/", (c) => c.html(renderOperatorPage()));
@@ -37,18 +54,23 @@ export function operatorRoutes(cfg: Config, engine: JobEngine): Hono {
   });
 
   app.get("/api/operator/session", (c) => {
-    const s = authed(c);
+    const s = requireReply(c);
+    if (s === "forbidden") return c.json({ ok: false, error: "no reply permission" }, 403);
     if (!s) return c.json({ ok: false }, 401);
     return c.json({ ok: true });
   });
 
   app.get("/api/operator/jobs", (c) => {
-    if (!authed(c)) return c.json({ error: "unauthorized" }, 401);
+    const s = requireReply(c);
+    if (s === "forbidden") return c.json({ error: "no reply permission" }, 403);
+    if (!s) return c.json({ error: "unauthorized" }, 401);
     return c.json({ jobs: engine.list() });
   });
 
   app.get("/api/operator/jobs/:id", (c) => {
-    if (!authed(c)) return c.json({ error: "unauthorized" }, 401);
+    const s = requireReply(c);
+    if (s === "forbidden") return c.json({ error: "no reply permission" }, 403);
+    if (!s) return c.json({ error: "unauthorized" }, 401);
     try {
       return c.json(engine.get(c.req.param("id")));
     } catch (err) {
@@ -58,7 +80,9 @@ export function operatorRoutes(cfg: Config, engine: JobEngine): Hono {
   });
 
   app.get("/api/operator/jobs/:id/context", (c) => {
-    if (!authed(c)) return c.json({ error: "unauthorized" }, 401);
+    const s = requireReply(c);
+    if (s === "forbidden") return c.json({ error: "no reply permission" }, 403);
+    if (!s) return c.json({ error: "unauthorized" }, 401);
     const id = c.req.param("id");
     try {
       const req = engine.normalized(id);
@@ -72,7 +96,8 @@ export function operatorRoutes(cfg: Config, engine: JobEngine): Hono {
   });
 
   app.post("/api/operator/jobs/:id/complete", async (c) => {
-    const session = authed(c);
+    const session = requireReply(c);
+    if (session === "forbidden") return c.json({ error: "no reply permission" }, 403);
     if (!session) return c.json({ error: "unauthorized" }, 401);
     const id = c.req.param("id");
     try {
@@ -89,7 +114,9 @@ export function operatorRoutes(cfg: Config, engine: JobEngine): Hono {
   });
 
   app.post("/api/operator/jobs/:id/cancel", async (c) => {
-    if (!authed(c)) return c.json({ error: "unauthorized" }, 401);
+    const s = requireReply(c);
+    if (s === "forbidden") return c.json({ error: "no reply permission" }, 403);
+    if (!s) return c.json({ error: "unauthorized" }, 401);
     try {
       await engine.cancel(c.req.param("id"), "operator");
       return c.json({ ok: true });

@@ -6,6 +6,8 @@ max_body_bytes = 16777216
 
 [auth]
 operator_token = ""
+bootstrap_username = "admin"
+bootstrap_password = ""
 
 [[auth.api_keys]]
 label = "Claude Code"

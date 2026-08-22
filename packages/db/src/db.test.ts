@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +7,7 @@ import { writeBlob } from "./blobs.ts";
 import { openDatabase } from "./client.ts";
 import { runRetention } from "./retention.ts";
 import type { JobRow } from "./schema.ts";
+import { newApiKeyId, newUser } from "./users.ts";
 
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), "carbon-db-"));
@@ -39,6 +41,30 @@ function baseJob(over: Partial<JobRow> = {}): JobRow {
     ...over,
   };
 }
+
+describe("users", () => {
+  test("insert user and hashed api key lookup", async () => {
+    const db = openDatabase(tmp());
+    const user = await newUser({ username: "ada", password: "password1", canReply: true });
+    db.users.insert(user);
+    expect(db.users.getByUsername("ADA")?.id).toBe(user.id);
+    const keyHash = createHash("sha256").update("sk-test").digest("hex");
+    db.users.insertKey({
+      id: newApiKeyId(),
+      user_id: user.id,
+      label: "t",
+      key_hash: keyHash,
+      key_prefix: "sk-test…",
+      created_at: Date.now(),
+      revoked_at: null,
+    });
+    expect(db.users.getKeyByHash(keyHash)?.user_id).toBe(user.id);
+    db.users.updateFlags(user.id, { can_reply: false, disabled: true });
+    expect(db.users.getById(user.id)?.can_reply).toBe(0);
+    expect(db.users.getById(user.id)?.disabled).toBe(1);
+    db.close();
+  });
+});
 
 describe("CarbonDb", () => {
   test("insert, get, fail in-flight, hash lookup", () => {

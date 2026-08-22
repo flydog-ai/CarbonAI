@@ -40,6 +40,29 @@ CREATE TABLE IF NOT EXISTS blobs (
 CREATE INDEX IF NOT EXISTS jobs_status_created ON jobs(status, created_at);
 CREATE INDEX IF NOT EXISTS jobs_vendor_id ON jobs(vendor_id);
 CREATE INDEX IF NOT EXISTS jobs_request_hash ON jobs(request_hash);
+
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT PRIMARY KEY,
+  username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  password_hash TEXT NOT NULL,
+  role          TEXT NOT NULL DEFAULT 'user',
+  can_reply     INTEGER NOT NULL DEFAULT 0,
+  disabled      INTEGER NOT NULL DEFAULT 0,
+  created_at    INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id),
+  label      TEXT NOT NULL,
+  key_hash   TEXT NOT NULL UNIQUE,
+  key_prefix TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  revoked_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS api_keys_user ON api_keys(user_id);
+CREATE INDEX IF NOT EXISTS api_keys_hash ON api_keys(key_hash);
 `;
 
 export type JobRow = {
@@ -73,4 +96,26 @@ export type BlobRow = {
   media_type: string;
   byte_len: number;
   path: string;
+};
+
+export type UserRole = "user" | "superadmin";
+
+export type UserRow = {
+  id: string;
+  username: string;
+  password_hash: string;
+  role: UserRole;
+  can_reply: number;
+  disabled: number;
+  created_at: number;
+};
+
+export type ApiKeyRow = {
+  id: string;
+  user_id: string;
+  label: string;
+  key_hash: string;
+  key_prefix: string;
+  created_at: number;
+  revoked_at: number | null;
 };

@@ -1,6 +1,7 @@
 import { loadConfig } from "@carbon-ai/config";
 import { openDatabase } from "@carbon-ai/db";
 import { createApp } from "./app.ts";
+import { ensureBootstrapAdmin } from "./auth/bootstrap.ts";
 import { JobEngine } from "./job/engine.ts";
 import { listen } from "./listen.ts";
 import { acquirePidfile } from "./pidfile.ts";
@@ -8,10 +9,11 @@ import { acquirePidfile } from "./pidfile.ts";
 const cfg = loadConfig({ generateOperatorTokenIfEmpty: true });
 const lock = acquirePidfile(cfg.server.dataDir);
 const db = openDatabase(cfg.server.dataDir);
+await ensureBootstrapAdmin(cfg, db);
 const engine = new JobEngine(cfg, db);
 engine.start();
 
-const app = createApp(cfg, { engine });
+const app = createApp(cfg, { engine, db });
 const handle = listen(app.fetch, {
   host: cfg.server.host,
   port: cfg.server.port,

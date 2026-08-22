@@ -57,8 +57,8 @@ Useful directions:
 
 - OpenAI-compatible Chat Completions / Responses adapters (Codex, DeepSeek-style agents)
 - OpenAI 兼容的 Chat Completions / Responses 适配器（Codex、DeepSeek 类智能体）
-- Operator console (inbox, paginated context, reply)
-- 操作台（inbox、分页上下文、回复）
+- Usage quotas, recharge, and assignable repliers
+- 用量限额、充值、指派回复者
 - Protocol fixtures and client simulators
 - 协议 fixture 与客户端模拟器
 

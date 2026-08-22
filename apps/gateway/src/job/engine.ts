@@ -35,6 +35,7 @@ export type CreateJobInput = {
   normalized?: NormalizedRequest;
   clientKeyId?: string;
   clientLabel?: string;
+  userId?: string;
   adapter?: ProtocolAdapter;
 };
 
@@ -54,6 +55,7 @@ export type JobSummary = {
   requestHash: string;
   claimedBy?: string;
   looksLikeRetryOf?: string;
+  userId?: string;
 };
 
 type TerminalState = { status: "completed" | "cancelled" | "failed"; error?: string };
@@ -77,6 +79,7 @@ type Runtime = {
   claimedBy?: string;
   claimedAt?: number;
   looksLikeRetryOf?: string;
+  userId?: string;
   adapter: ProtocolAdapter;
   writer?: SseSink;
   cancelReason?: CancelReason;
@@ -193,6 +196,7 @@ export class JobEngine {
         inputTokens: estimateRequestTokens(normalized),
         outputTokens: 0,
         looksLikeRetryOf: prior && prior.id !== id ? prior.id : undefined,
+        userId: input.userId,
         adapter: input.adapter ?? new TestAdapter(),
         attached,
         resolveAttached,
@@ -486,6 +490,7 @@ export class JobEngine {
       requestHash: rt.requestHash,
       claimedBy: rt.claimedBy,
       looksLikeRetryOf: rt.looksLikeRetryOf,
+      userId: rt.userId,
     };
   }
 }

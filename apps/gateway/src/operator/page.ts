@@ -139,9 +139,13 @@ export function renderOperatorPage(): string {
     <form class="card" id="login-form">
       <p class="kicker">Carbon AI</p>
       <h1>Operator desk</h1>
-      <p class="sub">Paste the operator token from the gateway log.<br>把网关日志里的 operator_token 贴进来。</p>
-      <label for="token">Operator token</label>
-      <input id="token" name="token" type="password" autocomplete="current-password" required>
+      <p class="sub">Sign in with a replier account, or paste the operator token from the log.<br>用有回复权限的账号登录，或粘贴网关日志里的 operator_token。</p>
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password">
+      <label for="token">Operator token (optional)</label>
+      <input id="token" name="token" type="password" autocomplete="off">
       <p class="err" id="login-err"></p>
       <button class="btn" type="submit">Enter / 进入</button>
     </form>
@@ -195,7 +199,7 @@ export function renderOperatorPage(): string {
         const wait = Math.round((j.waitMs || 0) / 1000) + "s";
         const prev = (j.lastUserPreview || "(no user text / 无用户文本)").replace(/[<>&]/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
         return '<button class="job' + (selected === j.id ? ' on' : '') + '" data-id="' + j.id + '">'
-          + '<div class="meta">' + pill(j.status) + ' ' + (j.displayModel || j.model) + ' · ' + wait + '</div>'
+          + '<div class="meta">' + pill(j.status) + ' ' + (j.clientLabel || j.displayModel || j.model) + ' · ' + wait + '</div>'
           + '<div class="prev">' + prev + '</div></button>';
       }).join("") || '<p class="empty">No jobs yet. 还没有任务。</p>';
       for (const btn of $("jobs").querySelectorAll(".job")) {
@@ -251,13 +255,30 @@ export function renderOperatorPage(): string {
     $("login-form").onsubmit = async (e) => {
       e.preventDefault();
       $("login-err").textContent = "";
-      const { res, body } = await api("/api/operator/login", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token: $("token").value }),
-      });
+      const username = $("username").value.trim();
+      const password = $("password").value;
+      const token = $("token").value;
+      let res, body;
+      if (username && password) {
+        ({ res, body } = await api("/api/auth/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        }));
+      } else {
+        ({ res, body } = await api("/api/operator/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ token }),
+        }));
+      }
       if (!res.ok) {
         $("login-err").textContent = body.error || "Login failed / 登录失败";
+        return;
+      }
+      const sess = await api("/api/operator/session");
+      if (!sess.res.ok) {
+        $("login-err").textContent = sess.body.error || "No reply permission / 没有回复权限";
         return;
       }
       $("login").hidden = true;

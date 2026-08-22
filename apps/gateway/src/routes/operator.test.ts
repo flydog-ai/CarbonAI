@@ -29,7 +29,7 @@ async function withSrv(fn: (url: string) => Promise<void>): Promise<void> {
   conf.auth.operatorToken = "op-test-token";
   const db = openDatabase(mkdtempSync(join(tmpdir(), "carbon-op-")));
   const engine = new JobEngine(conf, db);
-  const app = createApp(conf, { engine });
+  const app = createApp(conf, { engine, db });
   const handle = listen(app.fetch, { host: "127.0.0.1", port: pickPort(), idleTimeout: 0 });
   try {
     await fn(`http://127.0.0.1:${handle.port}`);

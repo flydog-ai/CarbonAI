@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Config } from "@carbon-ai/config";
+import type { CarbonDb } from "@carbon-ai/db";
 import { anthropicError, listModels } from "@carbon-ai/protocol";
 import { presentedClientKey, verifyClientKey } from "../auth/client-keys.ts";
 
@@ -7,7 +8,7 @@ function isAnthropic(c: { req: { header: (n: string) => string | undefined } }):
   return Boolean(c.req.header("anthropic-version"));
 }
 
-export function modelsRoutes(cfg: Config): Hono {
+export function modelsRoutes(cfg: Config, db?: CarbonDb): Hono {
   const app = new Hono();
 
   const catalog = (): ReturnType<typeof listModels> =>
@@ -18,7 +19,7 @@ export function modelsRoutes(cfg: Config): Hono {
     });
 
   const requireClient = (c: { req: { raw: Request } }) => {
-    const id = verifyClientKey(cfg, presentedClientKey(c.req.raw.headers));
+    const id = verifyClientKey(cfg, presentedClientKey(c.req.raw.headers), db);
     if (!id) {
       return anthropicError("authentication_error", "invalid x-api-key");
     }

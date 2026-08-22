@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { SCHEMA_SQL, type BlobRow, type JobRow } from "./schema.ts";
+import { UserRepo } from "./users.ts";
 
 const RAW_INLINE_LIMIT = 1024 * 1024;
 
@@ -9,6 +10,7 @@ export class CarbonDb {
   readonly path: string;
   readonly dataDir: string;
   readonly blobDir: string;
+  readonly users: UserRepo;
 
   constructor(
     readonly sqlite: Database,
@@ -17,6 +19,7 @@ export class CarbonDb {
     this.dataDir = dataDir;
     this.path = join(dataDir, "carbon.db");
     this.blobDir = join(dataDir, "blobs");
+    this.users = new UserRepo(sqlite);
     mkdirSync(this.blobDir, { recursive: true, mode: 0o700 });
   }
 
