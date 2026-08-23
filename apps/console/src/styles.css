@@ -30,6 +30,7 @@ button, input, textarea, select { font: inherit; }
 a { color: var(--primary); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .mono { font-family: "Red Hat Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+td.mono { word-break: break-all; max-width: 36ch; }
 .mark {
   width: 36px; height: 36px; border-radius: 10px; flex: 0 0 36px;
   background: var(--primary); color: #f8eadc;

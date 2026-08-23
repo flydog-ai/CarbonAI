@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   label      TEXT NOT NULL,
   key_hash   TEXT NOT NULL UNIQUE,
   key_prefix TEXT NOT NULL,
+  key_plain  TEXT,
   created_at INTEGER NOT NULL,
   revoked_at INTEGER
 );
@@ -121,6 +122,7 @@ export type ApiKeyRow = {
   label: string;
   key_hash: string;
   key_prefix: string;
+  key_plain: string | null;
   created_at: number;
   revoked_at: number | null;
 };

@@ -64,6 +64,7 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): H
       label: "default",
       key_hash: hashApiKey(plaintext),
       key_prefix: apiKeyPrefix(plaintext),
+      key_plain: plaintext,
       created_at: Date.now(),
       revoked_at: null,
     });
@@ -89,6 +90,7 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): H
       label: "default",
       key_hash: hashApiKey(plaintext),
       key_prefix: apiKeyPrefix(plaintext),
+      key_plain: plaintext,
       created_at: Date.now(),
       revoked_at: null,
     });
@@ -181,6 +183,7 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): H
       id: k.id,
       label: k.label,
       prefix: k.key_prefix,
+      apiKey: k.key_plain ?? undefined,
       createdAt: k.created_at,
     }));
     return c.json({ keys });
@@ -199,6 +202,7 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): H
       label,
       key_hash: hashApiKey(plaintext),
       key_prefix: apiKeyPrefix(plaintext),
+      key_plain: plaintext,
       created_at: Date.now(),
       revoked_at: null,
     });

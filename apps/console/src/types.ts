@@ -15,6 +15,7 @@ export type ApiKey = {
   id: string;
   label: string;
   prefix: string;
+  apiKey?: string;
   createdAt: number;
 };
 

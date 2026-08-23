@@ -21,12 +21,13 @@ export async function ensureBootstrapAdmin(cfg: Config, db: CarbonDb): Promise<v
     label: "default",
     key_hash: hashApiKey(plaintext),
     key_prefix: apiKeyPrefix(plaintext),
+    key_plain: plaintext,
     created_at: Date.now(),
     revoked_at: null,
   });
   console.log(`superadmin username: ${username}`);
   console.log("superadmin password: (from carbon.toml / CARBON_BOOTSTRAP_PASSWORD)");
-  console.log(`superadmin api key (shown once):\n${plaintext}`);
+  console.log(`superadmin api key:\n${plaintext}`);
 }
 
 /** One-shot: data_dir/reset-bootstrap whose first line is the new password. File is deleted after use. */

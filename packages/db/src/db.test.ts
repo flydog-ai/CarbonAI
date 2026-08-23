@@ -55,10 +55,12 @@ describe("users", () => {
       label: "t",
       key_hash: keyHash,
       key_prefix: "sk-test…",
+      key_plain: "sk-test",
       created_at: Date.now(),
       revoked_at: null,
     });
     expect(db.users.getKeyByHash(keyHash)?.user_id).toBe(user.id);
+    expect(db.users.listKeys(user.id)[0]?.key_plain).toBe("sk-test");
     const doomed = newApiKeyId();
     db.users.insertKey({
       id: doomed,
@@ -66,6 +68,7 @@ describe("users", () => {
       label: "gone",
       key_hash: createHash("sha256").update("sk-gone").digest("hex"),
       key_prefix: "sk-gone…gone",
+      key_plain: "sk-gone",
       created_at: Date.now(),
       revoked_at: null,
     });
@@ -78,6 +81,7 @@ describe("users", () => {
       label: "old-revoke",
       key_hash: createHash("sha256").update("sk-old").digest("hex"),
       key_prefix: "sk-old…old",
+      key_plain: null,
       created_at: Date.now(),
       revoked_at: Date.now(),
     });

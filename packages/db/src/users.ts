@@ -50,10 +50,10 @@ export class UserRepo {
   insertKey(row: ApiKeyRow): void {
     this.sqlite
       .query(
-        `INSERT INTO api_keys (id, user_id, label, key_hash, key_prefix, created_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO api_keys (id, user_id, label, key_hash, key_prefix, key_plain, created_at, revoked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(row.id, row.user_id, row.label, row.key_hash, row.key_prefix, row.created_at, row.revoked_at);
+      .run(row.id, row.user_id, row.label, row.key_hash, row.key_prefix, row.key_plain, row.created_at, row.revoked_at);
   }
 
   getKeyByHash(keyHash: string): ApiKeyRow | null {

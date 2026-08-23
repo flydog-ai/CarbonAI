@@ -161,6 +161,10 @@ export function openDatabase(dataDir: string): CarbonDb {
   sqlite.exec("BEGIN EXCLUSIVE;");
   sqlite.exec("COMMIT;");
   sqlite.exec(SCHEMA_SQL);
+  const keyCols = sqlite.query("PRAGMA table_info(api_keys)").all() as { name: string }[];
+  if (!keyCols.some((c) => c.name === "key_plain")) {
+    sqlite.exec("ALTER TABLE api_keys ADD COLUMN key_plain TEXT");
+  }
   return new CarbonDb(sqlite, dataDir);
 }
 

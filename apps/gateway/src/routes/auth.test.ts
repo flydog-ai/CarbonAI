@@ -280,6 +280,10 @@ describe("user accounts phase 1", () => {
       const key = (await minted.json()) as { id: string; apiKey: string; prefix: string };
       expect(key.id.startsWith("key_")).toBe(true);
       expect(key.apiKey.startsWith("sk-carbon-")).toBe(true);
+      const listed = await fetch(`${url}/api/me/keys`, { headers: { cookie } });
+      expect(listed.status).toBe(200);
+      const listedBody = (await listed.json()) as { keys: { id: string; apiKey?: string }[] };
+      expect(listedBody.keys.find((k) => k.id === key.id)?.apiKey).toBe(key.apiKey);
       const ccMinted = await fetch(`${url}/api/me/cc-switch`, {
         method: "POST",
         headers: { cookie, "content-type": "application/json" },

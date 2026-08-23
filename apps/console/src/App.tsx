@@ -827,9 +827,6 @@ function Keys({
   const [q, setQ] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [label, setLabel] = useState("");
-  const [secret, setSecret] = useState("");
-  const [ccHref, setCcHref] = useState("");
-  const [hint, setHint] = useState("");
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteFor, setPasteFor] = useState<ApiKey | null>(null);
   const [pasteVal, setPasteVal] = useState("");
@@ -856,7 +853,7 @@ function Keys({
   const rows = keys.filter((k) => {
     const s = q.trim().toLowerCase();
     if (!s) return true;
-    return k.label.toLowerCase().includes(s) || k.prefix.toLowerCase().includes(s);
+    return k.label.toLowerCase().includes(s) || k.prefix.toLowerCase().includes(s) || (k.apiKey ?? "").toLowerCase().includes(s);
   });
 
   return (
@@ -888,14 +885,14 @@ function Keys({
             {rows.length ? rows.map((k) => (
               <tr key={k.id}>
                 <td>{k.label}</td>
-                <td className="mono">{k.prefix}</td>
+                <td className="mono">{k.apiKey || k.prefix}</td>
                 <td>{fmtWhen(k.createdAt, t)}</td>
                 <td className="actions">
                   <button
                     type="button"
                     className="icon-btn"
                     onClick={() => {
-                      const s = secretFor(k);
+                      const s = k.apiKey || secretFor(k);
                       if (s) void importCc(s);
                       else { setPasteFor(k); setPasteVal(""); setPasteErr(""); setPasteOpen(true); }
                     }}
@@ -903,7 +900,7 @@ function Keys({
                     <IconImport />
                     {t("keys.importCc")}
                   </button>
-                  <button type="button" className="icon-btn" onClick={() => copy(k.prefix, t("keys.prefixCopied"))}>
+                  <button type="button" className="icon-btn" onClick={() => copy(k.apiKey || k.prefix, t(k.apiKey ? "keys.keyCopied" : "keys.prefixCopied"))}>
                     <IconCopy />
                     {t("keys.copy")}
                   </button>
@@ -929,14 +926,9 @@ function Keys({
               flash(body.error || t("keys.createFailed"));
               return;
             }
-            rememberSecret(body.apiKey, { id: body.id, prefix: body.prefix });
-            setSecret(body.apiKey);
-            const cc = await api<{ href?: string; endpoint?: string; model?: string }>("/api/me/cc-switch", jsonBody({ apiKey: body.apiKey }));
-            if (cc.res.ok && cc.body.href) {
-              setCcHref(cc.body.href);
-              setHint(t("keys.importHint", { endpoint: cc.body.endpoint || "", model: cc.body.model || "" }));
-            }
             setCreateOpen(false);
+            setLabel("");
+            flash(t("keys.created"));
             await load();
           }}>{t("keys.createBtn")}</button>
         </>
@@ -944,18 +936,6 @@ function Keys({
         <p className="sub">{t("keys.dialogSub")}</p>
         <label>{t("field.name")}</label>
         <input value={label} placeholder={t("keys.namePlaceholder")} onChange={(e) => setLabel(e.target.value)} />
-      </Modal>
-
-      <Modal open={Boolean(secret)} title={t("keys.secretTitle")} onClose={() => setSecret("")} footer={
-        <>
-          <button className="btn btn-secondary" type="button" onClick={() => copy(secret, t("keys.keyCopied"))}>{t("keys.copy")}</button>
-          <button className="btn" type="button" onClick={() => setSecret("")}>{t("keys.done")}</button>
-        </>
-      }>
-        <p className="sub">{t("keys.secretSub")}</p>
-        <div className="secret-box">{secret}</div>
-        <p className="err" style={{ color: "var(--muted)" }}>{hint || (connect ? t("keys.secretHint", { endpoint: connect.endpoint, model: connect.model || "" }) : "")}</p>
-        {ccHref ? <p style={{ margin: "12px 0 0" }}><a className="btn btn-sm" href={ccHref}>{t("keys.importCc")}</a></p> : null}
       </Modal>
 
       <Modal open={pasteOpen} title={t("keys.importPasteTitle")} onClose={() => setPasteOpen(false)} footer={
