@@ -6,6 +6,7 @@ import { DEFAULT_CONFIG, type Config } from "@carbon-ai/config";
 import { openDatabase } from "@carbon-ai/db";
 import { createApp } from "../app.ts";
 import { ensureBootstrapAdmin } from "../auth/bootstrap.ts";
+import { emptyNormalizedRequest } from "@carbon-ai/protocol";
 import { JobEngine } from "../job/engine.ts";
 import { listen } from "../listen.ts";
 
@@ -25,7 +26,7 @@ function cookieFrom(res: Response): string {
   return raw.split(";")[0] ?? "";
 }
 
-async function withSrv(fn: (url: string) => Promise<void>): Promise<void> {
+async function withSrv(fn: (url: string, engine: JobEngine) => Promise<void>): Promise<void> {
   const conf: Config = structuredClone(DEFAULT_CONFIG);
   conf.auth.bootstrapUsername = "admin";
   conf.auth.bootstrapPassword = "password1";
@@ -35,7 +36,7 @@ async function withSrv(fn: (url: string) => Promise<void>): Promise<void> {
   const app = createApp(conf, { engine, db });
   const handle = listen(app.fetch, { host: "127.0.0.1", port: pickPort(), idleTimeout: 0 });
   try {
-    await fn(`http://127.0.0.1:${handle.port}`);
+    await fn(`http://127.0.0.1:${handle.port}`, engine);
   } finally {
     handle.stop();
     engine.stop();
@@ -126,6 +127,58 @@ describe("operator desk", () => {
       const sseRes = await sse;
       expect(sseRes.status).toBe(200);
       expect(await sseRes.text()).toContain("pong from desk");
+    });
+  });
+
+  test("context lists client tools; complete can emit a tool_use turn", async () => {
+    await withSrv(async (url, engine) => {
+      const login = await fetch(`${url}/api/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "password1" }),
+      });
+      const cookie = cookieFrom(login);
+      const auth = { cookie };
+
+      const job = await engine.create({
+        protocol: "anthropic_messages",
+        stream: true,
+        rawBody: new Uint8Array(),
+        headers: {},
+        normalized: emptyNormalizedRequest({
+          stream: true,
+          tools: [{ kind: "anthropic_tool_use", name: "Bash", vendorRaw: {} }],
+          messages: [{ role: "user", parts: [{ type: "text", text: "list files" }] }],
+        }),
+      });
+      const sse = fetch(`${url}/debug/jobs/${job.id}/stream`);
+      await Bun.sleep(40);
+
+      const ctx = await fetch(`${url}/api/operator/jobs/${job.id}/context?limit=20`, { headers: auth });
+      const page = (await ctx.json()) as { tools: { name: string; template: string }[] };
+      expect(page.tools.some((t) => t.name === "Bash" && t.template.includes("command"))).toBe(true);
+
+      const denied = await fetch(`${url}/api/operator/jobs/${job.id}/complete`, {
+        method: "POST",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({ tools: [{ name: "Bash", input: '{"command":""}' }] }),
+      });
+      expect(denied.status).toBe(400);
+
+      const done = await fetch(`${url}/api/operator/jobs/${job.id}/complete`, {
+        method: "POST",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({
+          text: "listing",
+          tools: [{ name: "Bash", input: { command: "ls" } }],
+        }),
+      });
+      expect(done.status).toBe(200);
+      const out = (await done.json()) as { stopReason: string; blocks: { type: string; name?: string }[] };
+      expect(out.stopReason).toBe("tool_use");
+      expect(out.blocks.some((b) => b.type === "tool_use" && b.name === "Bash")).toBe(true);
+      const sseRes = await sse;
+      expect(await sseRes.text()).toContain('"name":"Bash"');
     });
   });
 });

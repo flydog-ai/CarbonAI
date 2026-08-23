@@ -54,3 +54,24 @@ export {
 export { opaqueEncryptedContent } from "./encrypted.ts";
 export { detectProtocol } from "./detect.ts";
 export { claudeModelSlots, displayNameFor, listModels, stripContextSuffix } from "./models.ts";
+export {
+  BEGIN_PATCH_TEMPLATE,
+  blocksFromReply,
+  catalogName,
+  findCatalogTool,
+  inputModeFor,
+  isToolKind,
+  payloadFromDraft,
+  payloadPreview,
+  paramsFor,
+  publicTools,
+  schemaRequiredKeys,
+  schemaTypeLabel,
+  templateFor,
+  ToolDraftError,
+  toolUseIds,
+  type OperatorToolDraft,
+  type PublicTool,
+  type ToolInputMode,
+  type ToolParam,
+} from "./tool-draft.ts";

@@ -293,6 +293,10 @@ textarea { min-height: 108px; resize: vertical; }
 .pill.cancelled, .pill.error { background: var(--danger-bg); color: var(--danger); }
 .pill.role { background: var(--soft); color: var(--primary); }
 .work { display: grid; grid-template-rows: auto 1fr auto; min-height: 0; min-width: 0; background: var(--chat); }
+.work-foot {
+  min-width: 0; min-height: 0; max-height: min(52vh, 460px);
+  display: flex; flex-direction: column; overflow: hidden;
+}
 .work-head {
   display: flex; align-items: center; gap: 10px; min-height: 52px;
   padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--chat-head);
@@ -371,7 +375,12 @@ textarea { min-height: 108px; resize: vertical; }
 .desk-err { padding: 0 16px 8px; background: var(--card); margin: 0; }
 .composer {
   border-top: 1px solid var(--line); padding: 10px 12px 12px;
-  display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; background: var(--chat-head);
+  display: flex; flex-direction: column; gap: 8px; background: var(--chat-head);
+  min-height: 0; min-width: 0; overflow: hidden; flex: 1;
+}
+.composer-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end;
+  flex-shrink: 0;
 }
 .composer textarea { min-height: 44px; max-height: 160px; resize: none; border-radius: 8px; padding: 10px 12px; }
 .composer-actions { display: flex; flex-direction: column; gap: 6px; }
@@ -379,6 +388,90 @@ textarea { min-height: 108px; resize: vertical; }
   display: block; text-align: center; color: var(--muted); font-size: 13px; padding: 14px;
 }
 .composer.read-only p { margin: 0; }
+.tools-bar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tools-open {
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  border-radius: 10px; padding: 6px 10px; font-size: 13px; font-weight: 650; cursor: pointer;
+}
+.tools-open:hover { background: var(--hover); border-color: var(--primary); }
+.tools-open-label { white-space: nowrap; }
+.tools-open-count { color: var(--muted); font-size: 12px; font-weight: 600; }
+.tools-chevron { flex-shrink: 0; color: var(--muted); }
+.tools-search {
+  flex: 1; min-width: 0; width: auto; margin: 8px 10px 0; padding: 6px 10px; font-size: 13px;
+  border-radius: 8px; min-height: 0;
+}
+.tools-hint, .tools-empty, .tools-meta { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.tool-panel {
+  display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+  box-shadow: var(--shadow);
+}
+.tool-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 8px 8px 12px; border-bottom: 1px solid var(--line); background: var(--chat-head);
+}
+.tool-panel-title { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.tool-panel-title b { font-size: 13px; }
+.tool-panel-title span { font-size: 12px; color: var(--muted); font-weight: 600; }
+.tools-close { flex-shrink: 0; }
+.tool-panel .tools-hint { margin: 6px 10px 0; }
+.tool-panel .tools-empty, .tool-panel .tools-meta { margin: 8px 10px; }
+.tool-list {
+  max-height: 180px; overflow: auto; border-top: 1px solid var(--line); margin-top: 8px;
+  background: var(--card);
+}
+.tool-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center;
+  width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line);
+  background: transparent; color: inherit; padding: 7px 10px; cursor: pointer; margin: 0; border-radius: 0;
+}
+.tool-row:last-child { border-bottom: 0; }
+.tool-row:hover { background: var(--hover); }
+.tool-row .name {
+  font-size: 13px; font-weight: 650; font-family: "Red Hat Mono", ui-monospace, monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tool-row .kind {
+  font-size: 10px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em; flex-shrink: 0;
+}
+.tool-row .sig {
+  grid-column: 1 / -1; font-size: 11px; color: var(--muted); line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: "Red Hat Mono", ui-monospace, monospace;
+}
+.tool-drafts { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: auto; flex: 1 1 auto; }
+.tool-draft {
+  border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 8px 10px;
+}
+.tool-draft-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px;
+}
+.tool-draft-head b { font-size: 13px; font-family: "Red Hat Mono", ui-monospace, monospace; }
+.tool-draft-head span { font-size: 11px; color: var(--muted); }
+.tool-draft-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tool-params {
+  list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px;
+}
+.tool-params li {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  max-width: 100%; padding: 3px 8px; border-radius: 8px;
+  background: var(--soft); font-size: 11px; color: var(--ink-2);
+}
+.tool-params li.req { background: color-mix(in srgb, var(--primary) 12%, var(--card)); }
+.tool-params code {
+  font-family: "Red Hat Mono", ui-monospace, monospace; font-weight: 650; color: var(--ink);
+}
+.tool-params span {
+  font-family: "Red Hat Mono", ui-monospace, monospace; color: var(--muted);
+}
+.tool-params em { font-style: normal; font-weight: 700; font-size: 10px; color: var(--primary); }
+.tool-draft textarea {
+  min-height: 88px; max-height: 240px; font-family: "Red Hat Mono", ui-monospace, monospace; font-size: 12.5px;
+  line-height: 1.45;
+}
 .empty { padding: 48px 20px; color: var(--muted); text-align: center; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 14px; vertical-align: middle; }
@@ -434,7 +527,8 @@ body[data-lang="zh"] .who-meta span,
 body[data-lang="zh"] .pill,
 body[data-lang="zh"] th,
 body[data-lang="zh"] .nav-label,
-body[data-lang="zh"] .msg-head { text-transform: none; letter-spacing: 0.04em; }
+body[data-lang="zh"] .msg-head,
+body[data-lang="zh"] .tool-row .kind { text-transform: none; letter-spacing: 0.04em; }
 .overlay {
   position: fixed; inset: 0; background: var(--overlay); z-index: 34;
 }

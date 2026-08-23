@@ -1,4 +1,4 @@
-import type { Job } from "./types.ts";
+import type { Job, PublicTool, ToolParam } from "./types.ts";
 
 export function fmtWhen(ts: number | undefined, t: (k: string, v?: Record<string, string | number>) => string): string {
   if (!ts) return "—";
@@ -15,6 +15,22 @@ export function isLive(j: Job): boolean {
 
 export function threadKey(j: { id: string; threadId?: string }): string {
   return j.threadId || j.id;
+}
+
+/** Space-separated tokens all match name, kind, or description. Empty query returns the same list. */
+export function filterTools(tools: PublicTool[], query: string): PublicTool[] {
+  const parts = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return tools;
+  return tools.filter((tool) => {
+    const params = (tool.params ?? []).map((p) => `${p.key} ${p.type}`).join(" ");
+    const hay = `${tool.name} ${tool.kind} ${tool.description ?? ""} ${params}`.toLowerCase();
+    return parts.every((p) => hay.includes(p));
+  });
+}
+
+export function formatParams(params: ToolParam[] | undefined): string {
+  if (!params?.length) return "";
+  return params.map((p) => `${p.key}: ${p.type}${p.required ? "" : "?"}`).join(" · ");
 }
 
 export function initials(label?: string): string {

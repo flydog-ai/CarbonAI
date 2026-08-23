@@ -125,4 +125,42 @@ describe("operator context", () => {
     expect(page.reply[0]?.source).toBe("reply");
     expect(page.reply[0]?.excerpt).toBe("pong from desk");
   });
+
+  test("context page includes the client's tool catalog", () => {
+    const req = emptyNormalizedRequest({
+      tools: [{ kind: "anthropic_tool_use", name: "Bash", description: "run a command", vendorRaw: {} }],
+    });
+    const page = pageContext("job_x", req, "0", 20);
+    expect(page.tools).toHaveLength(1);
+    expect(page.tools[0]?.name).toBe("Bash");
+    expect(page.tools[0]?.template).toContain("command");
+  });
+
+  test("tool_use reply is a titled tool card, not a JSON blob with the name glued on", () => {
+    const req = emptyNormalizedRequest({
+      messages: [{ role: "user", parts: [{ type: "text", text: "ls" }] }],
+    });
+    const page = pageContext("job_x", req, "0", 20, {
+      vendorMessageId: "msg_1",
+      model: "carbon-default",
+      createdAt: 1,
+      blocks: [
+        {
+          type: "tool_use",
+          kind: "anthropic_tool_use",
+          id: "toolu_1",
+          callId: "toolu_1",
+          name: "Bash",
+          payload: { form: "json", value: { command: "ls" } },
+        },
+      ],
+      stopReason: "tool_use",
+      inputTokens: 1,
+      outputTokens: 3,
+    });
+    expect(page.reply[0]?.kind).toBe("tool_use");
+    expect(page.reply[0]?.title).toBe("Bash");
+    expect(page.reply[0]?.excerpt).toContain('"command": "ls"');
+    expect(page.reply[0]?.collapsed).toBe(false);
+  });
 });

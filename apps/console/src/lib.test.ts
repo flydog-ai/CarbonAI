@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { groupThreads, initials, isLive, secretPrefix, threadKey } from "./lib.ts";
+import { filterTools, formatParams, groupThreads, initials, isLive, secretPrefix, threadKey } from "./lib.ts";
+import type { PublicTool } from "./types.ts";
 import type { Job } from "./types.ts";
 
 function job(over: Partial<Job> & { id: string }): Job {
@@ -33,6 +34,44 @@ describe("thread grouping", () => {
     expect(initials("claude")).toBe("C");
     expect(initials("碳基")).toBe("碳");
     expect(initials("")).toBe("?");
+  });
+});
+
+describe("filterTools", () => {
+  const tools: PublicTool[] = [
+    { key: "0", kind: "anthropic_tool_use", name: "Bash", required: ["command"], inputMode: "json", template: "{}" },
+    { key: "1", kind: "anthropic_tool_use", name: "mcp__github__list_issues", description: "list GitHub issues", required: [], inputMode: "json", template: "{}" },
+    { key: "2", kind: "local_shell", name: "local_shell", required: [], inputMode: "local_shell", template: "{}" },
+  ];
+
+  test("empty query keeps the full catalog", () => {
+    expect(filterTools(tools, "  ")).toHaveLength(3);
+  });
+
+  test("tokens match name, kind, or description", () => {
+    expect(filterTools(tools, "bash").map((t) => t.name)).toEqual(["Bash"]);
+    expect(filterTools(tools, "github issues").map((t) => t.name)).toEqual(["mcp__github__list_issues"]);
+    expect(filterTools(tools, "local_shell").map((t) => t.name)).toEqual(["local_shell"]);
+  });
+
+  test("108-style catalogs stay filterable without dropping unmatched leftovers", () => {
+    const many = Array.from({ length: 108 }, (_, i) => ({
+      ...tools[0]!,
+      key: String(i),
+      name: i === 41 ? "Read" : `tool_${i}`,
+    }));
+    expect(filterTools(many, "").length).toBe(108);
+    expect(filterTools(many, "read").map((t) => t.name)).toEqual(["Read"]);
+    expect(filterTools(many, "nope")).toEqual([]);
+  });
+
+  test("formatParams shows JSON types and marks optional keys", () => {
+    expect(
+      formatParams([
+        { key: "command", type: "string", required: true },
+        { key: "timeout", type: "number", required: false },
+      ]),
+    ).toBe("command: string · timeout: number?");
   });
 });
 

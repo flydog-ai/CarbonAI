@@ -2,10 +2,13 @@ import {
   estimateTextTokens,
   isMetaTag,
   parseEnvPairs,
+  payloadPreview,
+  publicTools,
   splitMarkup,
   type AssistantOutput,
   type ContentPart,
   type NormalizedRequest,
+  type PublicTool,
 } from "@carbon-ai/protocol";
 
 const SYS_EXCERPT = 500;
@@ -32,6 +35,7 @@ export type ContextPage = {
   system: ContextBlock[];
   blocks: ContextBlock[];
   reply: ContextBlock[];
+  tools: PublicTool[];
   nextCursor: string | null;
   hasMore: boolean;
   total: number;
@@ -44,7 +48,7 @@ function textOf(part: ContentPart): string {
     case "thinking":
       return part.thinking;
     case "tool_use":
-      return `${part.name ?? part.kind} ${JSON.stringify(part.payload)}`;
+      return payloadPreview(part.payload);
     case "tool_result":
       return part.content.map(textOf).join("\n");
     case "image":
@@ -138,10 +142,14 @@ function pushText(
     const kind = part.type;
     const roleForPart: ContextBlock["role"] =
       kind === "tool_result" ? "tool" : kind === "tool_use" ? "assistant" : role;
+    const title =
+      kind === "tool_use" ? (part.name ?? part.kind) : kind === "tool_result" ? "tool_result" : undefined;
     blocks.push(
       makeBlock(blocks.length, roleForPart, kind, textOf(part), {
         collapsed: kind === "thinking" || kind === "reasoning" || collapsed,
+        title,
         source,
+        max: kind === "tool_use" || kind === "tool_result" ? INLINE_LIMIT : undefined,
       }),
     );
     return;
@@ -207,8 +215,10 @@ export function flattenReply(output: AssistantOutput | undefined): ContextBlock[
       );
     } else {
       blocks.push(
-        makeBlock(blocks.length, "assistant", "tool_use", `${b.name ?? b.kind} ${JSON.stringify(b.payload)}`, {
+        makeBlock(blocks.length, "assistant", "tool_use", payloadPreview(b.payload), {
+          title: b.name ?? b.kind,
           source: "reply",
+          max: INLINE_LIMIT,
         }),
       );
     }
@@ -243,6 +253,7 @@ export function pageContext(
       system,
       blocks: slice,
       reply: end >= chat.length ? reply : [],
+      tools: publicTools(req.tools),
       nextCursor: start > 0 ? String(start) : null,
       hasMore: start > 0,
       total: chat.length,
@@ -257,6 +268,7 @@ export function pageContext(
     system,
     blocks: slice,
     reply: hasMore ? [] : reply,
+    tools: publicTools(req.tools),
     nextCursor: hasMore ? String(end) : null,
     hasMore,
     total: chat.length,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorKey, jsonBody } from "./api.ts";
 import {
   IconChat,
@@ -16,10 +16,10 @@ import {
   ThemeSwitch,
 } from "./components.tsx";
 import { detectLang, translate } from "./i18n.ts";
-import { copyText, fmtWhen, groupThreads, initials, isLive, readView, secretPrefix, setViewUrl, threadKey } from "./lib.ts";
+import { copyText, filterTools, formatParams, fmtWhen, groupThreads, initials, isLive, readView, secretPrefix, setViewUrl, threadKey } from "./lib.ts";
 import { Mark } from "./brand/Mark.tsx";
 import { applyTheme, detectTheme, persistTheme, themeIsLocked } from "./theme.ts";
-import type { ApiKey, ConnectInfo, ContextBlock, ContextPage, GuestKey, Job, Lang, SiteSettings, Theme, User, View } from "./types.ts";
+import type { ApiKey, ConnectInfo, ContextBlock, ContextPage, GuestKey, Job, Lang, PublicTool, SiteSettings, Theme, ToolParam, User, View } from "./types.ts";
 
 type Gate = "boot" | "setup" | "login" | "app";
 
@@ -646,6 +646,147 @@ function BlockBody({ block }: { block: ContextBlock }) {
   return <pre>{block.excerpt}{block.truncated ? "…" : ""}</pre>;
 }
 
+type PendingTool = {
+  id: string;
+  name: string;
+  kind: string;
+  input: string;
+  required: string[];
+  params: ToolParam[];
+  description?: string;
+};
+
+function ChevronDown() {
+  return (
+    <svg className="tools-chevron" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+      <path d="M2.2 4.2a.75.75 0 0 1 1.06 0L6 6.94 8.74 4.2a.75.75 0 1 1 1.06 1.06L6.53 8.53a.75.75 0 0 1-1.06 0L2.2 5.26a.75.75 0 0 1 0-1.06z" fill="currentColor" />
+    </svg>
+  );
+}
+
+const ToolPicker = memo(function ToolPicker({
+  catalog,
+  open,
+  queued,
+  onOpen,
+  onClose,
+  onPick,
+  t,
+}: {
+  catalog: PublicTool[];
+  open: boolean;
+  queued: number;
+  onOpen: () => void;
+  onClose: () => void;
+  onPick: (tool: PublicTool) => void;
+  t: (k: string, v?: Record<string, string | number>) => string;
+}) {
+  const [q, setQ] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const shown = useMemo(() => filterTools(catalog, q), [catalog, q]);
+
+  useEffect(() => {
+    if (open) searchRef.current?.focus();
+    else setQ("");
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!catalog.length) return null;
+
+  if (!open) {
+    return (
+      <div className="tools-bar">
+        <button
+          type="button"
+          className="tools-open"
+          aria-expanded={false}
+          aria-controls="desk-tool-picker"
+          onClick={onOpen}
+        >
+          <span className="tools-open-label">{queued ? t("desk.toolsAddMore") : t("desk.toolsAdd")}</span>
+          <span className="tools-open-count">{t("desk.toolsCount", { n: catalog.length })}</span>
+          <ChevronDown />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="tool-panel" id="desk-tool-picker" ref={panelRef} role="region" aria-label={t("desk.toolsTitle")}>
+      <div className="tool-panel-head">
+        <div className="tool-panel-title">
+          <b>{t("desk.toolsTitle")}</b>
+          <span>{t("desk.toolsCount", { n: catalog.length })}</span>
+        </div>
+        <button type="button" className="btn btn-sm btn-secondary tools-close" onClick={onClose}>
+          {t("desk.toolsClose")}
+        </button>
+      </div>
+      <input
+        ref={searchRef}
+        className="tools-search"
+        value={q}
+        placeholder={t("desk.toolsSearch")}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            const first = shown[0];
+            if (first) onPick(first);
+          }
+        }}
+      />
+      <p className="tools-hint">{t("desk.toolsHint")}</p>
+      {shown.length === 0 ? (
+        <p className="tools-empty">{t("desk.toolsEmpty")}</p>
+      ) : (
+        <div className="tool-list" role="listbox">
+          {shown.map((tool) => {
+            const sig = formatParams(tool.params);
+            return (
+              <button
+                key={tool.key}
+                type="button"
+                className="tool-row"
+                title={[sig, tool.description].filter(Boolean).join("\n") || tool.kind}
+                onClick={() => onPick(tool)}
+              >
+                <span className="name">{tool.name}</span>
+                <span className="kind">{tool.kind.replaceAll("_", " ")}</span>
+                {sig ? <span className="sig">{sig}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {q.trim() && shown.length !== catalog.length ? (
+        <p className="tools-meta">{t("desk.toolsFiltered", { shown: shown.length, n: catalog.length })}</p>
+      ) : null}
+    </div>
+  );
+});
+
+function lastClientTurnIsToolResult(blocks: ContextBlock[]): boolean {
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i]!;
+    if (b.kind === "tool_result") return true;
+    if (b.lane === "user") return false;
+    if (b.source === "reply") continue;
+  }
+  return false;
+}
+
 function ChatItem({
   block,
   t,
@@ -655,7 +796,13 @@ function ChatItem({
 }) {
   const lane = block.lane || (block.role === "assistant" ? "assistant" : block.role === "user" ? "user" : "system");
   const mine = lane === "assistant" || block.source === "reply";
-  const kindTitle = tagLabel(t, block.title || (block.kind && block.kind !== "text" ? block.kind : undefined));
+  const rawKind = block.title || (block.kind && block.kind !== "text" ? block.kind : undefined);
+  const kindTitle =
+    block.kind === "tool_use"
+      ? `${t("tag.tool_use")}${block.title ? ` · ${block.title}` : ""}`
+      : block.kind === "tool_result"
+        ? t("tag.tool_result")
+        : tagLabel(t, rawKind);
   const extra = block.truncated ? ` · ${t("desk.truncated")}` : "";
 
   if (lane === "system" || lane === "meta" || lane === "tool") {
@@ -700,6 +847,10 @@ function Sessions({
   const [cursor, setCursor] = useState("0");
   const [hasMore, setHasMore] = useState(false);
   const [draft, setDraft] = useState("");
+  const [catalog, setCatalog] = useState<PublicTool[]>([]);
+  const [pending, setPending] = useState<PendingTool[]>([]);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
   const [head, setHead] = useState<Job | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -732,6 +883,7 @@ function Sessions({
       setSystem(next.system || []);
       setBlocks(next.blocks || []);
       setYou(next.reply || []);
+      setCatalog(next.tools || []);
       stickBottom.current = true;
     } else {
       stickBottom.current = false;
@@ -755,7 +907,9 @@ function Sessions({
 
   useEffect(() => {
     setDraft("");
+    setPending([]);
     setErr("");
+    setToolsOpen(false);
   }, [selectedThread]);
 
   const selectedJobId = selectedRow?.id;
@@ -766,6 +920,7 @@ function Sessions({
       setSystem([]);
       setBlocks([]);
       setYou([]);
+      setCatalog([]);
       setHasMore(false);
       return;
     }
@@ -780,6 +935,25 @@ function Sessions({
     el.scrollTop = el.scrollHeight;
   }, [blocks, you, selectedThread]);
 
+  const queueTool = useCallback((tool: PublicTool) => {
+    setPending((prev) => [
+      ...prev,
+      {
+        id: `${tool.key}-${Date.now()}-${prev.length}`,
+        name: tool.name,
+        kind: tool.kind,
+        input: tool.template,
+        required: tool.required,
+        params: tool.params ?? [],
+        description: tool.description,
+      },
+    ]);
+    setToolsOpen(false);
+  }, []);
+
+  const openTools = useCallback(() => setToolsOpen(true), []);
+  const closeTools = useCallback(() => setToolsOpen(false), []);
+
   async function sendReply() {
     setErr("");
     if (!selectedRow) {
@@ -787,16 +961,23 @@ function Sessions({
       return;
     }
     const text = draft.trim();
-    if (!text) return;
+    const tools = pending.map((p) => ({ name: p.name, kind: p.kind, input: p.input }));
+    if (!text && tools.length === 0) {
+      setErr(t("desk.needReply"));
+      return;
+    }
+    setSending(true);
     const { res, body } = await api<{ error?: string }>(
       `/api/operator/jobs/${selectedRow.id}/complete`,
-      jsonBody({ text }),
+      jsonBody({ text: draft, tools: tools.length ? tools : undefined }),
     );
+    setSending(false);
     if (!res.ok) {
       setErr(body.error || t("desk.sendFailed"));
       return;
     }
     setDraft("");
+    setPending([]);
     openedSig.current = "";
     await refresh();
   }
@@ -881,31 +1062,90 @@ function Sessions({
             {err ? <p className="err desk-err">{err}</p> : null}
             {liveHead ? (
               <footer className="composer">
-                <textarea
-                  value={draft}
-                  placeholder={t("desk.placeholder")}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void sendReply();
-                  }}
+                <ToolPicker
+                  catalog={catalog}
+                  open={toolsOpen}
+                  queued={pending.length}
+                  onOpen={openTools}
+                  onClose={closeTools}
+                  onPick={queueTool}
+                  t={t}
                 />
-                <div className="composer-actions">
-                  <button className="btn" type="button" onClick={() => void sendReply()}>{t("desk.send")}</button>
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    onClick={async () => {
-                      if (!selectedRow) return;
-                      await api(`/api/operator/jobs/${selectedRow.id}/cancel`, { method: "POST" });
-                      openedSig.current = "";
-                      await refresh();
+                {pending.length ? (
+                  <div className="tool-drafts">
+                    {pending.map((p) => (
+                      <div key={p.id} className="tool-draft">
+                        <div className="tool-draft-head">
+                          <div>
+                            <b>{p.name}</b>
+                            {p.description ? <span className="tool-draft-desc"> · {p.description}</span> : null}
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setPending((prev) => prev.filter((x) => x.id !== p.id))}
+                          >
+                            {t("desk.toolRemove")}
+                          </button>
+                        </div>
+                        {p.params.length ? (
+                          <ul className="tool-params">
+                            {p.params.map((param) => (
+                              <li
+                                key={param.key}
+                                className={param.required ? "req" : ""}
+                                title={param.description || param.type}
+                              >
+                                <code>{param.key}</code>
+                                <span>{param.type}</span>
+                                {param.required ? <em>{t("desk.paramRequired")}</em> : null}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : p.required.length ? (
+                          <p className="tools-hint">{t("desk.required", { keys: p.required.join(", ") })}</p>
+                        ) : null}
+                        <textarea
+                          value={p.input}
+                          spellCheck={false}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setPending((prev) => prev.map((x) => (x.id === p.id ? { ...x, input: v } : x)));
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="composer-row">
+                  <textarea
+                    value={draft}
+                    placeholder={lastClientTurnIsToolResult(blocks) ? t("desk.continueHint") : t("desk.placeholder")}
+                    disabled={sending}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void sendReply();
                     }}
-                  >{t("desk.cancel")}</button>
+                  />
+                  <div className="composer-actions">
+                    <button className="btn" type="button" disabled={sending} onClick={() => void sendReply()}>{t("desk.send")}</button>
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      disabled={sending}
+                      onClick={async () => {
+                        if (!selectedRow) return;
+                        await api(`/api/operator/jobs/${selectedRow.id}/cancel`, { method: "POST" });
+                        openedSig.current = "";
+                        await refresh();
+                      }}
+                    >{t("desk.cancel")}</button>
+                  </div>
                 </div>
               </footer>
             ) : (
               <footer className="composer read-only">
-                <p>{t("desk.readOnly")}</p>
+                <p>{you.some((b) => b.kind === "tool_use") ? t("desk.waitTools") : t("desk.readOnly")}</p>
               </footer>
             )}
             </div>

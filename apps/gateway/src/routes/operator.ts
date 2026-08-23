@@ -1,9 +1,10 @@
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Config } from "@carbon-ai/config";
+import type { CarbonDb } from "@carbon-ai/db";
+import { blocksFromReply, ToolDraftError } from "@carbon-ai/protocol";
 import { OPERATOR_COOKIE, OperatorSessions } from "../auth/operator-session.ts";
 import { USER_COOKIE, UserSessions } from "../auth/user-session.ts";
-import type { CarbonDb } from "@carbon-ai/db";
 import { readJsonCapped } from "../http/read-json-capped.ts";
 import { JobEngine } from "../job/engine.ts";
 import { JobConflictError, JobNotFoundError } from "../job/errors.ts";
@@ -98,12 +99,13 @@ export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, use
     if (!session) return c.json({ error: "unauthorized" }, 401);
     const id = c.req.param("id");
     try {
-      const body = (await readJsonCapped(c.req.raw, cfg.server.maxBodyBytes)) as { text?: string };
-      const text = typeof body.text === "string" ? body.text : "";
-      if (!text.trim()) return c.json({ error: "text is required" }, 400);
-      const output = await engine.completeFromTest(id, [{ type: "text", text }], { sessionId: session.id });
+      const body = await readJsonCapped(c.req.raw, cfg.server.maxBodyBytes);
+      const req = engine.normalized(id);
+      const blocks = blocksFromReply(req.tools, body);
+      const output = await engine.completeFromTest(id, blocks, { sessionId: session.id });
       return c.json(output);
     } catch (err) {
+      if (err instanceof ToolDraftError) return c.json({ error: err.message }, 400);
       if (err instanceof JobNotFoundError) return c.json({ error: err.message }, 404);
       if (err instanceof JobConflictError) return c.json({ error: err.message }, 409);
       throw err;

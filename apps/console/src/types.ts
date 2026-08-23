@@ -65,10 +65,29 @@ export type ContextBlock = {
   fields?: { key: string; value: string }[];
 };
 
+export type ToolParam = {
+  key: string;
+  type: string;
+  required: boolean;
+  description?: string;
+};
+
+export type PublicTool = {
+  key: string;
+  kind: string;
+  name: string;
+  description?: string;
+  required: string[];
+  params?: ToolParam[];
+  inputMode: "json" | "freeform" | "apply_patch" | "local_shell" | "shell";
+  template: string;
+};
+
 export type ContextPage = {
   system?: ContextBlock[];
   blocks?: ContextBlock[];
   reply?: ContextBlock[];
+  tools?: PublicTool[];
   nextCursor?: string | null;
   hasMore?: boolean;
   total?: number;
