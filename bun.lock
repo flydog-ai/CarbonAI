@@ -13,6 +13,7 @@
       "name": "@carbon-ai/console",
       "version": "0.0.1",
       "dependencies": {
+        "@carbon-ai/protocol": "workspace:*",
         "react": "^19.2.8",
         "react-dom": "^19.2.8",
       },

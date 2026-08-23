@@ -12,11 +12,17 @@ import { asRecord } from "./record.ts";
 
 export type ToolInputMode = "json" | "freeform" | "apply_patch" | "local_shell" | "shell";
 
+export type ToolParamWidget = "text" | "textarea" | "number" | "boolean" | "enum" | "list" | "kv" | "json";
+
 export type ToolParam = {
   key: string;
   type: string;
+  widget: ToolParamWidget;
   required: boolean;
   description?: string;
+  enumValues?: string[];
+  minimum?: number;
+  maximum?: number;
 };
 
 export type PublicTool = {
@@ -266,30 +272,224 @@ function draftInputText(input: unknown): string {
   return pretty(input);
 }
 
-const PARAM_DESC_MAX = 80;
+const PARAM_DESC_MAX = 160;
 const TYPE_LABEL_MAX = 48;
+
+const TEXTAREA_KEYS = new Set([
+  "command",
+  "commands",
+  "content",
+  "diff",
+  "patch",
+  "prompt",
+  "body",
+  "text",
+  "input",
+  "code",
+  "sql",
+  "markdown",
+  "html",
+  "instructions",
+  "old_string",
+  "new_string",
+  "query",
+  "message",
+]);
 
 const BUILTIN_PARAMS: Record<string, ToolParam[]> = {
   Bash: [
-    { key: "command", type: "string", required: true },
-    { key: "timeout", type: "number", required: false },
+    param({ key: "command", type: "string", required: true }),
+    param({ key: "timeout", type: "number", required: false }),
   ],
-  Read: [{ key: "file_path", type: "string", required: true }],
+  Read: [param({ key: "file_path", type: "string", required: true })],
   Edit: [
-    { key: "file_path", type: "string", required: true },
-    { key: "old_string", type: "string", required: true },
-    { key: "new_string", type: "string", required: true },
+    param({ key: "file_path", type: "string", required: true }),
+    param({ key: "old_string", type: "string", required: true }),
+    param({ key: "new_string", type: "string", required: true }),
   ],
   Write: [
-    { key: "file_path", type: "string", required: true },
-    { key: "content", type: "string", required: true },
+    param({ key: "file_path", type: "string", required: true }),
+    param({ key: "content", type: "string", required: true }),
   ],
-  Glob: [{ key: "pattern", type: "string", required: true }],
+  Glob: [param({ key: "pattern", type: "string", required: true })],
   Grep: [
-    { key: "pattern", type: "string", required: true },
-    { key: "path", type: "string", required: false },
+    param({ key: "pattern", type: "string", required: true }),
+    param({ key: "path", type: "string", required: false }),
   ],
 };
+
+export function inferWidget(p: { key: string; type: string; enumValues?: string[] }): ToolParamWidget {
+  if (p.enumValues && p.enumValues.length > 0 && p.enumValues.length <= 12) return "enum";
+  if (p.key === "env") return "kv";
+  if (p.type === "boolean") return "boolean";
+  if (p.type === "number" || p.type === "integer") return "number";
+  if (p.type === "string[]" || p.type === "array") return "list";
+  if (p.type.endsWith("[]")) return p.type === "object[]" ? "json" : "list";
+  if (p.type === "object" || p.type === "any") return "json";
+  if (TEXTAREA_KEYS.has(p.key)) return "textarea";
+  return "text";
+}
+
+function param(over: Omit<ToolParam, "widget"> & { widget?: ToolParamWidget }): ToolParam {
+  return { ...over, widget: over.widget ?? inferWidget(over) };
+}
+
+export function emptyValue(p: ToolParam): unknown {
+  switch (p.widget) {
+    case "boolean":
+      return false;
+    case "number":
+      return "";
+    case "list":
+      return p.required ? [""] : [];
+    case "kv":
+      return [] as { k: string; v: string }[];
+    case "json":
+      return "{}";
+    case "enum":
+      return p.enumValues?.[0] ?? "";
+    default:
+      return "";
+  }
+}
+
+export function initialAssembled(params: ToolParam[]): string[] {
+  return params.filter((p) => p.required).map((p) => p.key);
+}
+
+export function isEmptyValue(p: ToolParam, value: unknown): boolean {
+  switch (p.widget) {
+    case "boolean":
+      return false;
+    case "number":
+      return value === "" || value == null || value === undefined;
+    case "list": {
+      const list = Array.isArray(value) ? value.map((x) => String(x).trim()).filter(Boolean) : [];
+      return list.length === 0;
+    }
+    case "kv": {
+      const rows = kvRows(value);
+      return rows.every((r) => !r.k.trim() && !r.v.trim());
+    }
+    case "json": {
+      const s = typeof value === "string" ? value.trim() : JSON.stringify(value ?? {});
+      return s === "" || s === "{}" || s === "[]" || s === "null";
+    }
+    default:
+      return String(value ?? "").trim() === "";
+  }
+}
+
+export function hydrateToolValues(
+  mode: ToolInputMode,
+  params: ToolParam[],
+  input: string,
+): { assembled: string[]; values: Record<string, unknown> } {
+  if (mode === "freeform") {
+    return { assembled: initialAssembled(params), values: { patch: input } };
+  }
+  let rec: Record<string, unknown> = {};
+  try {
+    rec = asRecord(JSON.parse(input) as unknown) ?? {};
+  } catch {
+    const assembled = initialAssembled(params);
+    const values: Record<string, unknown> = {};
+    for (const key of assembled) {
+      const p = params.find((item) => item.key === key);
+      if (p) values[key] = emptyValue(p);
+    }
+    return { assembled, values };
+  }
+  const assembled = [...initialAssembled(params)];
+  for (const key of Object.keys(rec)) {
+    if (params.some((p) => p.key === key) && !assembled.includes(key)) assembled.push(key);
+  }
+  const values: Record<string, unknown> = {};
+  for (const key of assembled) {
+    const p = params.find((item) => item.key === key);
+    if (!p) continue;
+    values[key] = rec[key] === undefined ? emptyValue(p) : displayValue(p, rec[key]);
+  }
+  return { assembled, values };
+}
+
+function displayValue(p: ToolParam, value: unknown): unknown {
+  switch (p.widget) {
+    case "kv":
+      return kvRows(value);
+    case "json":
+      return typeof value === "string" ? value : `${JSON.stringify(value ?? {}, null, 2)}\n`;
+    case "list":
+      return Array.isArray(value) ? value.map((x) => String(x)) : [String(value ?? "")];
+    case "number":
+      return value == null ? "" : value;
+    default:
+      return value ?? emptyValue(p);
+  }
+}
+
+export function serializeToolValues(
+  mode: ToolInputMode,
+  params: ToolParam[],
+  assembled: string[],
+  values: Record<string, unknown>,
+): string {
+  if (mode === "freeform") return String(values.patch ?? "");
+  const obj: Record<string, unknown> = {};
+  for (const key of assembled) {
+    const p = params.find((item) => item.key === key);
+    if (!p) continue;
+    const v = values[key];
+    if (!p.required && isEmptyValue(p, v)) continue;
+    obj[key] = coerceValue(p, v);
+  }
+  return pretty(obj);
+}
+
+function coerceValue(p: ToolParam, value: unknown): unknown {
+  switch (p.widget) {
+    case "boolean":
+      return value === true;
+    case "number": {
+      if (value === "" || value == null) return p.type === "integer" ? 0 : 0;
+      const n = typeof value === "number" ? value : Number(value);
+      return Number.isFinite(n) ? (p.type === "integer" ? Math.trunc(n) : n) : 0;
+    }
+    case "list":
+      return Array.isArray(value) ? value.map((x) => String(x)) : stringList(value);
+    case "kv": {
+      const out: Record<string, string> = {};
+      for (const row of kvRows(value)) {
+        if (!row.k.trim()) continue;
+        out[row.k] = row.v;
+      }
+      return out;
+    }
+    case "json": {
+      if (typeof value !== "string") return value ?? {};
+      try {
+        return JSON.parse(value) as unknown;
+      } catch {
+        return value;
+      }
+    }
+    default:
+      return value == null ? "" : String(value);
+  }
+}
+
+function kvRows(value: unknown): { k: string; v: string }[] {
+  if (Array.isArray(value)) {
+    return value.map((row) => {
+      const rec = asRecord(row);
+      if (rec) return { k: String(rec.k ?? rec.key ?? ""), v: String(rec.v ?? rec.value ?? "") };
+      return { k: "", v: String(row) };
+    });
+  }
+  const rec = asRecord(value);
+  if (!rec) return [];
+  return Object.entries(rec).map(([k, v]) => ({ k, v: String(v) }));
+}
 
 export function schemaTypeLabel(schema: unknown, depth = 0): string {
   const raw = schemaTypeLabelInner(schema, depth);
@@ -330,28 +530,33 @@ export function paramsFor(tool: NormalizedTool): ToolParam[] {
   const mode = inputModeFor(tool);
   if (mode === "apply_patch") {
     return [
-      { key: "type", type: '"create_file" | "update_file" | "delete_file"', required: true },
-      { key: "path", type: "string", required: true },
-      { key: "diff", type: "string", required: false },
+      param({
+        key: "type",
+        type: '"create_file" | "update_file" | "delete_file"',
+        required: true,
+        enumValues: ["create_file", "update_file", "delete_file"],
+      }),
+      param({ key: "path", type: "string", required: true }),
+      param({ key: "diff", type: "string", required: false }),
     ];
   }
   if (mode === "local_shell") {
     return [
-      { key: "type", type: '"exec"', required: true },
-      { key: "command", type: "string[]", required: true },
-      { key: "env", type: "object", required: true },
-      { key: "timeout_ms", type: "number", required: false },
-      { key: "working_directory", type: "string", required: false },
+      param({ key: "type", type: '"exec"', required: true, enumValues: ["exec"] }),
+      param({ key: "command", type: "string[]", required: true }),
+      param({ key: "env", type: "object", required: true }),
+      param({ key: "timeout_ms", type: "number", required: false }),
+      param({ key: "working_directory", type: "string", required: false }),
     ];
   }
   if (mode === "shell") {
     return [
-      { key: "commands", type: "string[]", required: true },
-      { key: "timeout_ms", type: "number", required: false },
+      param({ key: "commands", type: "string[]", required: true }),
+      param({ key: "timeout_ms", type: "number", required: false }),
     ];
   }
   if (mode === "freeform") {
-    return [{ key: "patch", type: "Begin Patch (text)", required: true }];
+    return [param({ key: "patch", type: "Begin Patch (text)", required: true, widget: "textarea" })];
   }
   const schema = "inputSchema" in tool ? tool.inputSchema : undefined;
   const fromSchema = paramsFromSchema(schema);
@@ -373,13 +578,22 @@ function paramsFromSchema(schema: unknown): ToolParam[] {
     if (seen.has(key)) continue;
     seen.add(key);
     const prop = props[key];
-    const desc = asRecord(prop)?.description;
-    out.push({
-      key,
-      type: schemaTypeLabel(prop),
-      required: requiredSet.has(key),
-      description: typeof desc === "string" && desc.trim() ? desc.trim().slice(0, PARAM_DESC_MAX) : undefined,
-    });
+    const rec = asRecord(prop);
+    const desc = rec?.description;
+    const enumRaw = rec && Array.isArray(rec.enum) ? rec.enum : undefined;
+    const enumValues =
+      enumRaw && enumRaw.length > 0 && enumRaw.length <= 12 ? enumRaw.map((v) => String(v)) : undefined;
+    out.push(
+      param({
+        key,
+        type: schemaTypeLabel(prop),
+        required: requiredSet.has(key),
+        description: typeof desc === "string" && desc.trim() ? desc.trim().slice(0, PARAM_DESC_MAX) : undefined,
+        enumValues,
+        minimum: typeof rec?.minimum === "number" ? rec.minimum : undefined,
+        maximum: typeof rec?.maximum === "number" ? rec.maximum : undefined,
+      }),
+    );
   }
   return out;
 }

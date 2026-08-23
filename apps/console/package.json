@@ -9,6 +9,7 @@
     "watch": "vite build --watch"
   },
   "dependencies": {
+    "@carbon-ai/protocol": "workspace:*",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

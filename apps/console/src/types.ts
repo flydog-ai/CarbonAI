@@ -65,11 +65,17 @@ export type ContextBlock = {
   fields?: { key: string; value: string }[];
 };
 
+export type ToolParamWidget = "text" | "textarea" | "number" | "boolean" | "enum" | "list" | "kv" | "json";
+
 export type ToolParam = {
   key: string;
   type: string;
+  widget?: ToolParamWidget;
   required: boolean;
   description?: string;
+  enumValues?: string[];
+  minimum?: number;
+  maximum?: number;
 };
 
 export type PublicTool = {

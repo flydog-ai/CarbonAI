@@ -3,9 +3,13 @@ import { emptyNormalizedRequest } from "./events.ts";
 import {
   BEGIN_PATCH_TEMPLATE,
   blocksFromReply,
+  emptyValue,
+  hydrateToolValues,
+  initialAssembled,
   payloadFromDraft,
   publicTools,
   schemaTypeLabel,
+  serializeToolValues,
   templateFor,
   ToolDraftError,
 } from "./tool-draft.ts";
@@ -37,9 +41,9 @@ describe("tool drafts", () => {
     ]);
     expect(catalog).toHaveLength(3);
     expect(catalog[0]).toMatchObject({ name: "Bash", kind: "anthropic_tool_use", required: ["command"], inputMode: "json" });
-    expect(catalog[0]?.params).toEqual([
-      { key: "command", type: "string", required: true },
-      { key: "timeout", type: "number", required: false },
+    expect(catalog[0]?.params).toMatchObject([
+      { key: "command", type: "string", required: true, widget: "textarea" },
+      { key: "timeout", type: "number", required: false, widget: "number" },
     ]);
     expect(catalog[0]?.template).toContain('"command"');
     expect(catalog[1]).toMatchObject({ name: "local_shell", inputMode: "local_shell" });
@@ -126,6 +130,43 @@ describe("tool drafts", () => {
     expect(schemaTypeLabel({ type: "array", items: { type: "string" } })).toBe("string[]");
     expect(schemaTypeLabel({ enum: ["create_file", "update_file"] })).toBe('"create_file" | "update_file"');
     expect(schemaTypeLabel({ type: ["string", "null"] })).toBe("string | null");
+  });
+
+  test("serializeToolValues keeps required fields and skips empty optional ones", () => {
+    const params = publicTools([bash])[0]!.params;
+    expect(initialAssembled(params)).toEqual(["command"]);
+    const assembled = ["command", "timeout"];
+    const body = serializeToolValues("json", params, assembled, { command: "ls", timeout: "" });
+    expect(JSON.parse(body)).toEqual({ command: "ls" });
+    expect(emptyValue(params[0]!)).toBe("");
+    const hydrated = hydrateToolValues("json", params, '{"command":"pwd","timeout":5}');
+    expect(hydrated.assembled).toEqual(["command", "timeout"]);
+    expect(hydrated.values).toEqual({ command: "pwd", timeout: 5 });
+  });
+
+  test("enum and list widgets assemble from schema", () => {
+    const catalog = publicTools([
+      {
+        kind: "anthropic_tool_use",
+        name: "mode_tool",
+        inputSchema: {
+          type: "object",
+          required: ["mode", "tags"],
+          properties: {
+            mode: { type: "string", enum: ["fast", "slow"], description: "how hard to try" },
+            tags: { type: "array", items: { type: "string" } },
+            limit: { type: "integer", minimum: 1, maximum: 10 },
+          },
+        },
+        vendorRaw: {},
+      },
+    ]);
+    const params = catalog[0]!.params;
+    expect(params[0]).toMatchObject({ key: "mode", widget: "enum", enumValues: ["fast", "slow"], required: true });
+    expect(params[1]).toMatchObject({ key: "tags", widget: "list", type: "string[]", required: true });
+    expect(params[2]).toMatchObject({ key: "limit", widget: "number", minimum: 1, maximum: 10, required: false });
+    const json = serializeToolValues("json", params, ["mode", "tags"], { mode: "fast", tags: ["a", "b"] });
+    expect(JSON.parse(json)).toEqual({ mode: "fast", tags: ["a", "b"] });
   });
 
   test("optional-only schemas do not dump every property into the click template", () => {

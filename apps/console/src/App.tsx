@@ -17,9 +17,10 @@ import {
 } from "./components.tsx";
 import { detectLang, translate } from "./i18n.ts";
 import { copyText, filterTools, formatParams, fmtWhen, groupThreads, initials, isLive, readView, secretPrefix, setViewUrl, threadKey } from "./lib.ts";
+import { pendingFromTool, ToolDraftCard, type PendingTool } from "./ToolDraft.tsx";
 import { Mark } from "./brand/Mark.tsx";
 import { applyTheme, detectTheme, persistTheme, themeIsLocked } from "./theme.ts";
-import type { ApiKey, ConnectInfo, ContextBlock, ContextPage, GuestKey, Job, Lang, PublicTool, SiteSettings, Theme, ToolParam, User, View } from "./types.ts";
+import type { ApiKey, ConnectInfo, ContextBlock, ContextPage, GuestKey, Job, Lang, PublicTool, SiteSettings, Theme, User, View } from "./types.ts";
 
 type Gate = "boot" | "setup" | "login" | "app";
 
@@ -646,16 +647,6 @@ function BlockBody({ block }: { block: ContextBlock }) {
   return <pre>{block.excerpt}{block.truncated ? "…" : ""}</pre>;
 }
 
-type PendingTool = {
-  id: string;
-  name: string;
-  kind: string;
-  input: string;
-  required: string[];
-  params: ToolParam[];
-  description?: string;
-};
-
 function ChevronDown() {
   return (
     <svg className="tools-chevron" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
@@ -938,15 +929,7 @@ function Sessions({
   const queueTool = useCallback((tool: PublicTool) => {
     setPending((prev) => [
       ...prev,
-      {
-        id: `${tool.key}-${Date.now()}-${prev.length}`,
-        name: tool.name,
-        kind: tool.kind,
-        input: tool.template,
-        required: tool.required,
-        params: tool.params ?? [],
-        description: tool.description,
-      },
+      { ...pendingFromTool(tool), id: `${tool.key}-${Date.now()}-${prev.length}` },
     ]);
     setToolsOpen(false);
   }, []);
@@ -1074,46 +1057,13 @@ function Sessions({
                 {pending.length ? (
                   <div className="tool-drafts">
                     {pending.map((p) => (
-                      <div key={p.id} className="tool-draft">
-                        <div className="tool-draft-head">
-                          <div>
-                            <b>{p.name}</b>
-                            {p.description ? <span className="tool-draft-desc"> · {p.description}</span> : null}
-                          </div>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => setPending((prev) => prev.filter((x) => x.id !== p.id))}
-                          >
-                            {t("desk.toolRemove")}
-                          </button>
-                        </div>
-                        {p.params.length ? (
-                          <ul className="tool-params">
-                            {p.params.map((param) => (
-                              <li
-                                key={param.key}
-                                className={param.required ? "req" : ""}
-                                title={param.description || param.type}
-                              >
-                                <code>{param.key}</code>
-                                <span>{param.type}</span>
-                                {param.required ? <em>{t("desk.paramRequired")}</em> : null}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : p.required.length ? (
-                          <p className="tools-hint">{t("desk.required", { keys: p.required.join(", ") })}</p>
-                        ) : null}
-                        <textarea
-                          value={p.input}
-                          spellCheck={false}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setPending((prev) => prev.map((x) => (x.id === p.id ? { ...x, input: v } : x)));
-                          }}
-                        />
-                      </div>
+                      <ToolDraftCard
+                        key={p.id}
+                        draft={p}
+                        t={t}
+                        onChange={(next) => setPending((prev) => prev.map((x) => (x.id === p.id ? next : x)))}
+                        onRemove={() => setPending((prev) => prev.filter((x) => x.id !== p.id))}
+                      />
                     ))}
                   </div>
                 ) : null}
