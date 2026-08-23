@@ -226,12 +226,29 @@ export function pageContext(
   cursor: string,
   limit: number,
   output?: AssistantOutput,
+  opts: { tail?: boolean } = {},
 ): ContextPage {
   const system = flattenSystem(req);
   const chat = flattenMessages(req);
   const reply = flattenReply(output);
-  const start = Math.max(0, Number.parseInt(cursor || "0", 10) || 0);
   const size = Math.min(100, Math.max(1, limit));
+  if (opts.tail) {
+    const parsed = Number.parseInt(cursor, 10);
+    const useLatest = !cursor || cursor === "0" || !Number.isFinite(parsed);
+    const end = useLatest ? chat.length : Math.min(chat.length, Math.max(0, parsed));
+    const start = Math.max(0, end - size);
+    const slice = chat.slice(start, end);
+    return {
+      jobId,
+      system,
+      blocks: slice,
+      reply: end >= chat.length ? reply : [],
+      nextCursor: start > 0 ? String(start) : null,
+      hasMore: start > 0,
+      total: chat.length,
+    };
+  }
+  const start = Math.max(0, Number.parseInt(cursor || "0", 10) || 0);
   const slice = chat.slice(start, start + size);
   const end = start + slice.length;
   const hasMore = end < chat.length;

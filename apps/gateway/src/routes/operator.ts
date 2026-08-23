@@ -82,7 +82,10 @@ export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, use
       const req = engine.normalized(id);
       const cursor = c.req.query("cursor") ?? "0";
       const limit = Number(c.req.query("limit") ?? "50");
-      return c.json(pageContext(id, req, cursor, Number.isFinite(limit) ? limit : 50, engine.output(id)));
+      const tail = c.req.query("tail") === "1";
+      return c.json(
+        pageContext(id, req, cursor, Number.isFinite(limit) ? limit : 50, engine.output(id), { tail }),
+      );
     } catch (err) {
       if (err instanceof JobNotFoundError) return c.json({ error: err.message }, 404);
       throw err;

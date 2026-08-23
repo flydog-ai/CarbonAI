@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { emptyNormalizedRequest } from "./events.ts";
-import { conversationTurns, isConversationContinuation } from "./thread.ts";
+import { continuationPrefixLength, conversationTurns, isConversationContinuation } from "./thread.ts";
 
 function req(messages: { role: "user" | "assistant"; text: string }[]) {
   return emptyNormalizedRequest({
@@ -47,5 +47,24 @@ describe("isConversationContinuation", () => {
     const a = req([{ role: "user", text: "hello" }]);
     const b = req([{ role: "user", text: "other chat" }]);
     expect(isConversationContinuation(a, b)).toBe(false);
+  });
+
+  test("continuationPrefixLength prefers the longer shared history", () => {
+    const first = req([{ role: "user", text: "你好" }]);
+    const second = req([
+      { role: "user", text: "你好" },
+      { role: "assistant", text: "你也会啊" },
+      { role: "user", text: "OK  不错" },
+    ]);
+    const third = req([
+      { role: "user", text: "你好" },
+      { role: "assistant", text: "你也会啊" },
+      { role: "user", text: "OK  不错" },
+      { role: "assistant", text: "okk" },
+      { role: "user", text: "来吧" },
+    ]);
+    expect(continuationPrefixLength(first, third)).toBe(1);
+    expect(continuationPrefixLength(second, third)).toBe(3);
+    expect(continuationPrefixLength(third, second)).toBe(0);
   });
 });

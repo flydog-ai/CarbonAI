@@ -38,6 +38,9 @@ function baseJob(over: Partial<JobRow> = {}): JobRow {
     created_at: Date.now(),
     started_at: null,
     finished_at: null,
+    thread_id: null,
+    turn_count: null,
+    last_user_preview: null,
     ...over,
   };
 }

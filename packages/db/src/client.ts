@@ -37,8 +37,9 @@ export class CarbonDb {
           id, status, protocol, vendor_id, model, client_key_id, client_label, stream,
           request_hash, request_path, request_json, headers_json, normalized_json,
           response_json, events_json, claimed_by, claimed_at, error_json,
-          input_tokens, output_tokens, created_at, started_at, finished_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          input_tokens, output_tokens, created_at, started_at, finished_at,
+          thread_id, turn_count, last_user_preview
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         row.id,
@@ -64,6 +65,9 @@ export class CarbonDb {
         row.created_at,
         row.started_at,
         row.finished_at,
+        row.thread_id,
+        row.turn_count,
+        row.last_user_preview,
       );
   }
 
@@ -107,6 +111,12 @@ export class CarbonDb {
 
   listRecent(limit = 50): JobRow[] {
     return this.sqlite.query("SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?").all(limit) as JobRow[];
+  }
+
+  listRecentByClient(clientKeyId: string, limit = 40): JobRow[] {
+    return this.sqlite
+      .query("SELECT * FROM jobs WHERE client_key_id = ? ORDER BY created_at DESC LIMIT ?")
+      .all(clientKeyId, limit) as JobRow[];
   }
 
   failInFlight(now = Date.now()): number {
@@ -161,11 +171,16 @@ export function openDatabase(dataDir: string): CarbonDb {
   sqlite.exec("BEGIN EXCLUSIVE;");
   sqlite.exec("COMMIT;");
   sqlite.exec(SCHEMA_SQL);
-  const keyCols = sqlite.query("PRAGMA table_info(api_keys)").all() as { name: string }[];
-  if (!keyCols.some((c) => c.name === "key_plain")) {
-    sqlite.exec("ALTER TABLE api_keys ADD COLUMN key_plain TEXT");
-  }
+  ensureColumn(sqlite, "api_keys", "key_plain", "TEXT");
+  ensureColumn(sqlite, "jobs", "thread_id", "TEXT");
+  ensureColumn(sqlite, "jobs", "turn_count", "INTEGER");
+  ensureColumn(sqlite, "jobs", "last_user_preview", "TEXT");
   return new CarbonDb(sqlite, dataDir);
+}
+
+function ensureColumn(sqlite: Database, table: string, name: string, spec: string): void {
+  const cols = sqlite.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === name)) sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${spec}`);
 }
 
 export { RAW_INLINE_LIMIT };

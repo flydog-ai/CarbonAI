@@ -106,6 +106,54 @@ describe("JobEngine", () => {
     }
   });
 
+  test("follow-up after a new engine on the same db keeps the thread", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "carbon-thr-"));
+    const db = openDatabase(dir);
+    const conf = cfg(() => undefined);
+    const firstEngine = new JobEngine(conf, db);
+    try {
+      const firstNorm = emptyNormalizedRequest({
+        messages: [{ role: "user", parts: [{ type: "text", text: "你好" }] }],
+      });
+      const first = await firstEngine.create({
+        protocol: "anthropic_messages",
+        stream: false,
+        rawBody: new TextEncoder().encode("zh-1"),
+        headers: {},
+        normalized: firstNorm,
+        clientKeyId: "key_alice",
+      });
+      await firstEngine.completeFromTest(first.id, [{ type: "text", text: "你也会啊" }]);
+      firstEngine.stop();
+      const secondEngine = new JobEngine(conf, db);
+      const second = await secondEngine.create({
+        protocol: "anthropic_messages",
+        stream: false,
+        rawBody: new TextEncoder().encode("zh-2"),
+        headers: {},
+        normalized: emptyNormalizedRequest({
+          messages: [
+            { role: "user", parts: [{ type: "text", text: "你好" }] },
+            { role: "assistant", parts: [{ type: "text", text: "你也会啊" }] },
+            { role: "user", parts: [{ type: "text", text: "OK  不错" }] },
+          ],
+        }),
+        clientKeyId: "key_alice",
+      });
+      expect(second.threadId).toBe(first.threadId);
+      expect(second.turnCount).toBe(3);
+      const listed = secondEngine.list();
+      const threadRows = listed.filter((j) => j.threadId === first.threadId);
+      expect(threadRows.length).toBeGreaterThanOrEqual(2);
+      expect(secondEngine.get(first.id).threadId).toBe(first.threadId);
+      expect(secondEngine.normalized(first.id).messages[0]?.parts[0]).toMatchObject({ type: "text", text: "你好" });
+      expect(secondEngine.output(first.id).blocks.some((b) => b.type === "text" && b.text === "你也会啊")).toBe(true);
+      secondEngine.stop();
+    } finally {
+      db.close();
+    }
+  });
+
   test("max_pending rejects with JobQueueFullError", async () => {
     const { engine, db } = setup((c) => {
       c.jobs.maxPending = 1;

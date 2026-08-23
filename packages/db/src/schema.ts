@@ -27,7 +27,10 @@ CREATE TABLE IF NOT EXISTS jobs (
   output_tokens INTEGER,
   created_at    INTEGER NOT NULL,
   started_at    INTEGER,
-  finished_at   INTEGER
+  finished_at   INTEGER,
+  thread_id     TEXT,
+  turn_count    INTEGER,
+  last_user_preview TEXT
 );
 
 CREATE TABLE IF NOT EXISTS blobs (
@@ -40,6 +43,7 @@ CREATE TABLE IF NOT EXISTS blobs (
 CREATE INDEX IF NOT EXISTS jobs_status_created ON jobs(status, created_at);
 CREATE INDEX IF NOT EXISTS jobs_vendor_id ON jobs(vendor_id);
 CREATE INDEX IF NOT EXISTS jobs_request_hash ON jobs(request_hash);
+CREATE INDEX IF NOT EXISTS jobs_client_created ON jobs(client_key_id, created_at);
 
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
@@ -95,6 +99,9 @@ export type JobRow = {
   created_at: number;
   started_at: number | null;
   finished_at: number | null;
+  thread_id: string | null;
+  turn_count: number | null;
+  last_user_preview: string | null;
 };
 
 export type BlobRow = {

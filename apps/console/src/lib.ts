@@ -13,20 +13,32 @@ export function isLive(j: Job): boolean {
   return j.status === "pending" || j.status === "claimed" || j.status === "streaming";
 }
 
+export function threadKey(j: { id: string; threadId?: string }): string {
+  return j.threadId || j.id;
+}
+
+export function initials(label?: string): string {
+  const s = (label || "?").trim();
+  const ch = [...s][0];
+  return ch ? ch.toUpperCase() : "?";
+}
+
 export function groupThreads(jobs: Job[]): Job[] {
   const map = new Map<string, Job[]>();
   for (const j of jobs) {
-    const tid = j.threadId || j.id;
+    const tid = threadKey(j);
     const list = map.get(tid) ?? [];
     list.push(j);
     map.set(tid, list);
   }
-  return [...map.values()].map((items) => {
-    items.sort((a, b) => b.createdAt - a.createdAt);
-    const live = items.filter(isLive);
-    const latest = live[0] ?? items[0]!;
-    return { ...latest, turnCount: Math.max(...items.map((i) => i.turnCount || 1)) };
-  });
+  return [...map.values()]
+    .map((items) => {
+      items.sort((a, b) => b.createdAt - a.createdAt);
+      const live = items.filter(isLive);
+      const latest = live[0] ?? items[0]!;
+      return { ...latest, turnCount: Math.max(...items.map((i) => i.turnCount || 1)) };
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export function secretPrefix(plaintext: string): string {

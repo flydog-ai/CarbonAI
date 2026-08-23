@@ -31,7 +31,7 @@ export {
   toolNames,
   visibleUserText,
 } from "./tokens.ts";
-export { conversationTurns, isConversationContinuation } from "./thread.ts";
+export { continuationPrefixLength, conversationTurns, isConversationContinuation } from "./thread.ts";
 export { isMetaTag, parseEnvPairs, splitMarkup, type MarkupSegment } from "./markup.ts";
 export { AnthropicAdapter } from "./adapters/anthropic.ts";
 export { normalizeAnthropicRequest } from "./normalize/anthropic.ts";

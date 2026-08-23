@@ -15,7 +15,7 @@ import {
   Pill,
 } from "./components.tsx";
 import { detectLang, translate } from "./i18n.ts";
-import { copyText, fmtWhen, groupThreads, isLive, readView, secretPrefix, setViewUrl } from "./lib.ts";
+import { copyText, fmtWhen, groupThreads, initials, isLive, readView, secretPrefix, setViewUrl, threadKey } from "./lib.ts";
 import type { ApiKey, ConnectInfo, ContextBlock, ContextPage, GuestKey, Job, Lang, SiteSettings, User, View } from "./types.ts";
 
 type Gate = "boot" | "setup" | "login" | "app";
@@ -609,15 +609,13 @@ function ChatItem({
   t: (k: string, v?: Record<string, string | number>) => string;
 }) {
   const lane = block.lane || (block.role === "assistant" ? "assistant" : block.role === "user" ? "user" : "system");
-  const mine = block.source === "reply";
-  const title =
-    mine
-      ? t("desk.you")
-      : tagLabel(t, block.title || (block.kind && block.kind !== "text" ? block.kind : undefined)) ||
-        (t(`blk.${block.role}`) !== `blk.${block.role}` ? t(`blk.${block.role}`) : block.role);
+  const mine = lane === "assistant" || block.source === "reply";
+  const kindTitle = tagLabel(t, block.title || (block.kind && block.kind !== "text" ? block.kind : undefined));
   const extra = block.truncated ? ` · ${t("desk.truncated")}` : "";
 
   if (lane === "system" || lane === "meta" || lane === "tool") {
+    const title =
+      kindTitle || (t(`blk.${block.role}`) !== `blk.${block.role}` ? t(`blk.${block.role}`) : block.role);
     return (
       <article className={`msg meta lane-${lane}${block.collapsed ? " collapsed" : ""}`}>
         <button
@@ -634,11 +632,7 @@ function ChatItem({
 
   return (
     <article className={`msg ${lane}${mine ? " you" : ""}`}>
-      <div className="msg-head">
-        {title}
-        {block.kind && block.kind !== "text" && lane === "assistant" ? ` · ${block.kind}` : ""}
-        {extra}
-      </div>
+      {kindTitle ? <div className="msg-kind">{kindTitle}{extra}</div> : extra ? <div className="msg-kind">{t("desk.truncated")}</div> : null}
       <BlockBody block={block} />
     </article>
   );
@@ -654,7 +648,7 @@ function Sessions({
   statusLabel: (s: string) => string;
 }) {
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [system, setSystem] = useState<ContextBlock[]>([]);
   const [blocks, setBlocks] = useState<ContextBlock[]>([]);
   const [you, setYou] = useState<ContextBlock[]>([]);
@@ -664,12 +658,48 @@ function Sessions({
   const [err, setErr] = useState("");
   const [head, setHead] = useState<Job | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const stickBottom = useRef(true);
+  const openedSig = useRef("");
+
+  const threads = groupThreads(jobs);
+  const selectedRow = selectedThread ? threads.find((j) => threadKey(j) === selectedThread) ?? null : null;
+  const selectedSig = selectedRow ? `${selectedRow.id}:${selectedRow.status}:${selectedRow.turnCount ?? 1}` : "";
 
   const refresh = useCallback(async () => {
     if (!canDesk) return;
     const { res, body } = await api<{ jobs?: Job[] }>("/api/operator/jobs");
     if (res.ok) setJobs(body.jobs || []);
   }, [canDesk]);
+
+  const loadChat = useCallback(async (jobId: string, reset: boolean, fromCursor = "0") => {
+    setErr("");
+    const meta = await api<Job>(`/api/operator/jobs/${jobId}`);
+    if (meta.res.ok) setHead(meta.body);
+    const cur = reset ? "0" : fromCursor;
+    const page = await api<ContextPage>(
+      `/api/operator/jobs/${jobId}/context?tail=1&cursor=${encodeURIComponent(cur)}&limit=80`,
+    );
+    if (!page.res.ok) return;
+    const next = page.body;
+    const el = scroller.current;
+    const prevHeight = el?.scrollHeight ?? 0;
+    if (reset) {
+      setSystem(next.system || []);
+      setBlocks(next.blocks || []);
+      setYou(next.reply || []);
+      stickBottom.current = true;
+    } else {
+      stickBottom.current = false;
+      setBlocks((prev) => (next.blocks || []).concat(prev));
+    }
+    setCursor(next.nextCursor || "0");
+    setHasMore(Boolean(next.hasMore));
+    if (!reset && el) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight - prevHeight;
+      });
+    }
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -679,52 +709,52 @@ function Sessions({
   }, [canDesk, refresh]);
 
   useEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [blocks, you, selected]);
-
-  async function openJob(id: string, reset = true, fromCursor?: string) {
-    setSelected(id);
+    setDraft("");
     setErr("");
-    const meta = await api<Job>(`/api/operator/jobs/${id}`);
-    if (meta.res.ok) setHead(meta.body);
-    const cur = reset ? "0" : (fromCursor ?? cursor);
-    const page = await api<ContextPage>(
-      `/api/operator/jobs/${id}/context?cursor=${encodeURIComponent(cur)}&limit=50`,
-    );
-    if (!page.res.ok) return;
-    const next = page.body;
-    if (reset) setSystem(next.system || []);
-    setBlocks((prev) => (reset ? next.blocks || [] : prev.concat(next.blocks || [])));
-    setYou(next.reply || []);
-    setCursor(next.nextCursor || "0");
-    setHasMore(Boolean(next.hasMore));
-    await refresh();
-  }
+  }, [selectedThread]);
+
+  const selectedJobId = selectedRow?.id;
+  useEffect(() => {
+    if (!selectedJobId || !selectedSig) {
+      openedSig.current = "";
+      setHead(null);
+      setSystem([]);
+      setBlocks([]);
+      setYou([]);
+      setHasMore(false);
+      return;
+    }
+    if (openedSig.current === selectedSig) return;
+    openedSig.current = selectedSig;
+    void loadChat(selectedJobId, true);
+  }, [selectedJobId, selectedSig, loadChat]);
+
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || !stickBottom.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [blocks, you, selectedThread]);
 
   async function sendReply() {
     setErr("");
-    if (!selected) {
+    if (!selectedRow) {
       setErr(t("desk.pickFirst"));
       return;
     }
     const text = draft.trim();
     if (!text) return;
-    const { res, body } = await api<{ error?: string }>(`/api/operator/jobs/${selected}/complete`, jsonBody({ text }));
+    const { res, body } = await api<{ error?: string }>(
+      `/api/operator/jobs/${selectedRow.id}/complete`,
+      jsonBody({ text }),
+    );
     if (!res.ok) {
       setErr(body.error || t("desk.sendFailed"));
       return;
     }
     setDraft("");
-    await openJob(selected, true);
+    openedSig.current = "";
+    await refresh();
   }
-
-  const threads = groupThreads(jobs);
-  const live = threads.filter(isLive);
-  const rest = threads.filter((j) => !live.includes(j)).slice(0, 24);
-  const rows = live.concat(rest);
-  const emptyChat = !blocks.length && !you.length && !system.length;
 
   if (!canDesk) {
     return (
@@ -735,75 +765,112 @@ function Sessions({
     );
   }
 
+  const liveHead = head ? isLive(head) : false;
+  const emptyChat = !blocks.length && !you.length && !system.length;
+
   return (
-    <div className="desk">
+    <div className={`desk${selectedThread ? " has-chat" : ""}`}>
       <aside className="inbox">
-        {rows.length ? rows.map((j) => (
-          <button key={j.id} type="button" className={`job${selected === j.id ? " on" : ""}`} onClick={() => void openJob(j.id)}>
-            <div className="meta">
-              <Pill status={j.status} label={statusLabel(j.status)} />
-              {j.clientLabel || j.displayModel || j.model}
-              {j.turnCount && j.turnCount > 1 ? ` · ${t("desk.turn")} ${j.turnCount}` : ""}
-              {" · "}
-              {t("desk.wait", { n: Math.round((j.waitMs || 0) / 1000) })}
-            </div>
-            <div className="prev">{j.lastUserPreview || t("desk.noUserText")}</div>
+        <div className="inbox-head">{t("desk.inbox")}</div>
+        {threads.length ? threads.map((j) => (
+          <button
+            key={threadKey(j)}
+            type="button"
+            className={`conv${threadKey(j) === selectedThread ? " on" : ""}${isLive(j) ? " live" : ""}`}
+            onClick={() => setSelectedThread(threadKey(j))}
+          >
+            <span className="conv-avatar">{initials(j.clientLabel || j.displayModel || j.model)}</span>
+            <span className="conv-main">
+              <span className="conv-top">
+                <b>{j.clientLabel || j.displayModel || t("desk.client")}</b>
+                <time>{fmtWhen(j.createdAt, t)}</time>
+              </span>
+              <span className="conv-prev">{j.lastUserPreview || t("desk.noUserText")}</span>
+            </span>
+            {isLive(j) ? <span className="conv-dot" title={statusLabel(j.status)} /> : null}
           </button>
         )) : <p className="empty">{t("desk.empty")}</p>}
       </aside>
       <div className="work">
-        <header className="work-head">
-          <p className="sub" style={{ margin: 0 }}>
-            {head ? `${t("desk.client")} · ${head.clientLabel || "—"}` : t("desk.select")}
-            {head?.threadId ? ` · ${head.threadId}` : ""}
-          </p>
-          <h1>
-            {head ? <><Pill status={head.status} label={statusLabel(head.status)} /> {head.displayModel || head.model}</> : t("desk.inbox")}
-          </h1>
-        </header>
-        <div className="ctx" ref={scroller}>
-          {system.length ? (
-            <details className="sys-pack">
-              <summary>
-                {t("desk.systemPack")}
-                <span>{t("desk.systemPackHint", { n: system.length })}</span>
-              </summary>
-              {system.map((b, i) => <ChatItem key={`sys-${i}`} block={b} t={t} />)}
-            </details>
-          ) : null}
-          {emptyChat && !head ? <p className="empty">{t("desk.emptyLive")}</p> : null}
-          <div className="transcript">
-            {blocks.map((b, i) => <ChatItem key={`m-${i}`} block={b} t={t} />)}
-            {you.map((b, i) => <ChatItem key={`y-${i}`} block={b} t={t} />)}
+        {selectedRow || head ? (
+          <>
+            <header className="work-head">
+              <button type="button" className="chat-back" onClick={() => setSelectedThread(null)} aria-label={t("desk.back")}>
+                ←
+              </button>
+              <span className="conv-avatar sm">{initials(head?.clientLabel || selectedRow?.clientLabel || head?.displayModel)}</span>
+              <div className="chat-who">
+                <h1>{head?.clientLabel || selectedRow?.clientLabel || head?.displayModel || t("desk.client")}</h1>
+                <p>
+                  {liveHead ? t("desk.waiting") : head ? statusLabel(head.status) : t("desk.select")}
+                  {head?.turnCount && head.turnCount > 1 ? ` · ${t("desk.turns", { n: head.turnCount })}` : ""}
+                </p>
+              </div>
+            </header>
+            <div className="ctx" ref={scroller}>
+              {system.length ? (
+                <details className="sys-pack">
+                  <summary>
+                    {t("desk.systemPack")}
+                    <span>{t("desk.systemPackHint", { n: system.length })}</span>
+                  </summary>
+                  {system.map((b, i) => <ChatItem key={`sys-${i}`} block={b} t={t} />)}
+                </details>
+              ) : null}
+              {hasMore ? (
+                <button
+                  className="earlier"
+                  type="button"
+                  onClick={() => selectedRow && void loadChat(selectedRow.id, false, cursor)}
+                >
+                  {t("desk.earlier")}
+                </button>
+              ) : null}
+              {emptyChat ? <p className="empty">{t("desk.emptyLive")}</p> : null}
+              <div className="transcript">
+                {blocks.map((b, i) => <ChatItem key={`m-${i}`} block={b} t={t} />)}
+                {you.map((b, i) => <ChatItem key={`y-${i}`} block={b} t={t} />)}
+              </div>
+            </div>
+            <div className="work-foot">
+            {err ? <p className="err desk-err">{err}</p> : null}
+            {liveHead ? (
+              <footer className="composer">
+                <textarea
+                  value={draft}
+                  placeholder={t("desk.placeholder")}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void sendReply();
+                  }}
+                />
+                <div className="composer-actions">
+                  <button className="btn" type="button" onClick={() => void sendReply()}>{t("desk.send")}</button>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={async () => {
+                      if (!selectedRow) return;
+                      await api(`/api/operator/jobs/${selectedRow.id}/cancel`, { method: "POST" });
+                      openedSig.current = "";
+                      await refresh();
+                    }}
+                  >{t("desk.cancel")}</button>
+                </div>
+              </footer>
+            ) : (
+              <footer className="composer read-only">
+                <p>{t("desk.readOnly")}</p>
+              </footer>
+            )}
+            </div>
+          </>
+        ) : (
+          <div className="chat-empty">
+            <p>{t("desk.pickHint")}</p>
           </div>
-          {hasMore ? (
-            <button className="btn btn-secondary btn-sm" type="button" onClick={() => selected && void openJob(selected, false, cursor)}>
-              {t("desk.loadMore")}
-            </button>
-          ) : null}
-        </div>
-        <footer className="composer">
-          <textarea
-            value={draft}
-            placeholder={t("desk.placeholder")}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void sendReply();
-            }}
-          />
-          <button className="btn" type="button" onClick={() => void sendReply()}>{t("desk.send")}</button>
-          <button
-            className="btn btn-secondary"
-            type="button"
-            onClick={async () => {
-              if (!selected) return;
-              await api(`/api/operator/jobs/${selected}/cancel`, { method: "POST" });
-              await refresh();
-            }}
-          >{t("desk.cancel")}</button>
-        </footer>
+        )}
       </div>
-      {err ? <p className="err desk-err">{err}</p> : null}
     </div>
   );
 }

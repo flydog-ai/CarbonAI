@@ -86,6 +86,28 @@ describe("operator context", () => {
     expect(cmd?.excerpt).toContain("args -m hi");
   });
 
+  test("tail page starts from the latest messages", () => {
+    const req = emptyNormalizedRequest({
+      messages: [
+        { role: "user", parts: [{ type: "text", text: "one" }] },
+        { role: "assistant", parts: [{ type: "text", text: "two" }] },
+        { role: "user", parts: [{ type: "text", text: "three" }] },
+        { role: "assistant", parts: [{ type: "text", text: "four" }] },
+        { role: "user", parts: [{ type: "text", text: "five" }] },
+      ],
+    });
+    const page = pageContext("job_x", req, "0", 2, undefined, { tail: true });
+    expect(page.blocks.map((b) => b.excerpt)).toEqual(["four", "five"]);
+    expect(page.hasMore).toBe(true);
+    expect(page.nextCursor).toBe("3");
+    const earlier = pageContext("job_x", req, page.nextCursor ?? "3", 2, undefined, { tail: true });
+    expect(earlier.blocks.map((b) => b.excerpt)).toEqual(["two", "three"]);
+    expect(earlier.hasMore).toBe(true);
+    const oldest = pageContext("job_x", req, earlier.nextCursor ?? "1", 2, undefined, { tail: true });
+    expect(oldest.blocks.map((b) => b.excerpt)).toEqual(["one"]);
+    expect(oldest.hasMore).toBe(false);
+  });
+
   test("operator reply is an assistant bubble with source reply", () => {
     const req = emptyNormalizedRequest({
       messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }],

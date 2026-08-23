@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Config } from "@carbon-ai/config";
-import { RAW_INLINE_LIMIT, runRetention, type CarbonDb } from "@carbon-ai/db";
+import { RAW_INLINE_LIMIT, runRetention, type CarbonDb, type JobRow } from "@carbon-ai/db";
 import {
   emptyNormalizedRequest,
   eventsFromBlocks,
@@ -11,8 +11,8 @@ import {
   lastUserPreview,
   sha256Hex,
   toolNames,
+  continuationPrefixLength,
   conversationTurns,
-  isConversationContinuation,
   type AssistantBlock,
   type AssistantOutput,
   type CancelReason,
@@ -177,12 +177,10 @@ export class JobEngine {
       }
 
       const clientKeyId = input.clientKeyId ?? "debug";
-      const parent = [...this.jobs.values()]
-        .filter((j) => j.clientKeyId === clientKeyId)
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .find((j) => isConversationContinuation(j.request, normalized));
+      const parent = this.findThreadParent(clientKeyId, normalized);
       const threadId = parent?.threadId ?? ids.thread();
       const turnCount = Math.max(1, conversationTurns(normalized).length);
+      const preview = lastUserPreview(normalized);
 
       let resolveAttached!: () => void;
       const attached = new Promise<void>((r) => {
@@ -246,6 +244,9 @@ export class JobEngine {
         created_at: createdAt,
         started_at: null,
         finished_at: null,
+        thread_id: threadId,
+        turn_count: turnCount,
+        last_user_preview: preview || null,
       });
       this.jobs.set(id, rt);
       return this.summary(rt);
@@ -370,16 +371,50 @@ export class JobEngine {
   }
 
   get(jobId: string): JobSummary {
-    return this.summary(this.require(jobId));
+    const rt = this.jobs.get(jobId);
+    if (rt) return this.summary(rt);
+    const row = this.db.getJob(jobId);
+    if (row) return this.summaryFromRow(row);
+    throw new JobNotFoundError(jobId);
   }
 
   normalized(jobId: string): NormalizedRequest {
-    return this.require(jobId).request;
+    const rt = this.jobs.get(jobId);
+    if (rt) return rt.request;
+    const row = this.db.getJob(jobId);
+    if (row?.normalized_json) {
+      try {
+        return JSON.parse(row.normalized_json) as NormalizedRequest;
+      } catch {
+        /* fall through */
+      }
+    }
+    throw new JobNotFoundError(jobId);
   }
 
   output(jobId: string): AssistantOutput {
-    const rt = this.require(jobId);
-    return fold(rt.events);
+    const rt = this.jobs.get(jobId);
+    if (rt) return fold(rt.events);
+    const row = this.db.getJob(jobId);
+    if (row?.events_json) {
+      try {
+        return fold(JSON.parse(row.events_json) as InternalEvent[]);
+      } catch {
+        /* fall through */
+      }
+    }
+    if (row) {
+      return {
+        vendorMessageId: row.vendor_id,
+        model: row.model,
+        createdAt: row.created_at,
+        blocks: [],
+        stopReason: "end_turn",
+        inputTokens: row.input_tokens ?? 1,
+        outputTokens: row.output_tokens ?? 0,
+      };
+    }
+    throw new JobNotFoundError(jobId);
   }
 
   json(jobId: string): unknown {
@@ -388,9 +423,70 @@ export class JobEngine {
   }
 
   list(): JobSummary[] {
-    return [...this.jobs.values()]
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .map((j) => this.summary(j));
+    const byId = new Map<string, JobSummary>();
+    for (const row of this.db.listRecent(80)) {
+      byId.set(row.id, this.summaryFromRow(row));
+    }
+    for (const rt of this.jobs.values()) {
+      byId.set(rt.id, this.summary(rt));
+    }
+    return [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  private findThreadParent(
+    clientKeyId: string,
+    next: NormalizedRequest,
+  ): { threadId: string } | undefined {
+    type Cand = { createdAt: number; prefix: number; threadId: string; request: NormalizedRequest };
+    const candidates: Cand[] = [];
+    for (const j of this.jobs.values()) {
+      if (j.clientKeyId !== clientKeyId) continue;
+      candidates.push({ createdAt: j.createdAt, prefix: 0, threadId: j.threadId, request: j.request });
+    }
+    for (const row of this.db.listRecentByClient(clientKeyId, 40)) {
+      if (this.jobs.has(row.id) || !row.normalized_json || !row.thread_id) continue;
+      try {
+        const request = JSON.parse(row.normalized_json) as NormalizedRequest;
+        candidates.push({
+          createdAt: row.created_at,
+          prefix: 0,
+          threadId: row.thread_id,
+          request,
+        });
+      } catch {
+        /* ignore bad rows */
+      }
+    }
+    let best: Cand | undefined;
+    for (const c of candidates) {
+      const prefix = continuationPrefixLength(c.request, next);
+      if (prefix === 0) continue;
+      if (!best || prefix > best.prefix || (prefix === best.prefix && c.createdAt > best.createdAt)) {
+        best = { ...c, prefix };
+      }
+    }
+    return best ? { threadId: best.threadId } : undefined;
+  }
+
+  private summaryFromRow(row: JobRow): JobSummary {
+    return {
+      id: row.id,
+      status: row.status as JobStatus,
+      protocol: row.protocol as Protocol,
+      model: row.model,
+      displayModel: row.model,
+      clientLabel: row.client_label,
+      stream: row.stream === 1,
+      createdAt: row.created_at,
+      waitMs: this.now() - row.created_at,
+      inputTokensEst: row.input_tokens ?? 1,
+      toolNames: [],
+      lastUserPreview: row.last_user_preview ?? "",
+      requestHash: row.request_hash,
+      userId: undefined,
+      threadId: row.thread_id,
+      turnCount: row.turn_count ?? 1,
+    };
   }
 
   private claimUnlocked(rt: Runtime, sessionId: string): void {

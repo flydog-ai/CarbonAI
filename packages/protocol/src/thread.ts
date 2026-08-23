@@ -29,10 +29,15 @@ export function conversationTurns(req: NormalizedRequest): ConversationTurn[] {
   return out;
 }
 
-/** True when `next` is the same chat as `prev` plus at least one new turn. */
-export function isConversationContinuation(prev: NormalizedRequest, next: NormalizedRequest): boolean {
+/** How many of `prev`'s visible turns are an exact prefix of `next`. 0 = not a continuation. */
+export function continuationPrefixLength(prev: NormalizedRequest, next: NormalizedRequest): number {
   const a = conversationTurns(prev);
   const b = conversationTurns(next);
-  if (a.length === 0 || b.length <= a.length) return false;
-  return a.every((t, i) => t.role === b[i]?.role && t.text === b[i]?.text);
+  if (a.length === 0 || b.length <= a.length) return 0;
+  return a.every((t, i) => t.role === b[i]?.role && t.text === b[i]?.text) ? a.length : 0;
+}
+
+/** True when `next` is the same chat as `prev` plus at least one new turn. */
+export function isConversationContinuation(prev: NormalizedRequest, next: NormalizedRequest): boolean {
+  return continuationPrefixLength(prev, next) > 0;
 }
