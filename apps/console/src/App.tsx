@@ -17,6 +17,7 @@ import {
 } from "./components.tsx";
 import { detectLang, translate } from "./i18n.ts";
 import { copyText, filterTools, formatParams, fmtWhen, groupThreads, initials, isLive, readView, secretPrefix, setViewUrl, threadKey } from "./lib.ts";
+import { ChatItem } from "./ChatItem.tsx";
 import { pendingFromTool, ToolDraftCard, type PendingTool } from "./ToolDraft.tsx";
 import { Mark } from "./brand/Mark.tsx";
 import { applyTheme, detectTheme, persistTheme, themeIsLocked } from "./theme.ts";
@@ -624,29 +625,6 @@ function Stat({ k, v, h }: { k: string; v: string | number; h?: string }) {
   );
 }
 
-function tagLabel(t: (k: string, v?: Record<string, string | number>) => string, kind?: string): string {
-  if (!kind || kind === "text") return "";
-  const key = `tag.${kind}`;
-  const label = t(key);
-  return label !== key ? label : kind.replaceAll("_", " ").replaceAll("-", " ");
-}
-
-function BlockBody({ block }: { block: ContextBlock }) {
-  if (block.fields?.length) {
-    return (
-      <dl className="kv">
-        {block.fields.map((row, i) => (
-          <div key={i} className="kv-row">
-            {row.key ? <dt>{row.key}</dt> : null}
-            <dd>{row.value}</dd>
-          </div>
-        ))}
-      </dl>
-    );
-  }
-  return <pre>{block.excerpt}{block.truncated ? "…" : ""}</pre>;
-}
-
 function ChevronDown() {
   return (
     <svg className="tools-chevron" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
@@ -776,49 +754,6 @@ function lastClientTurnIsToolResult(blocks: ContextBlock[]): boolean {
     if (b.source === "reply") continue;
   }
   return false;
-}
-
-function ChatItem({
-  block,
-  t,
-}: {
-  block: ContextBlock;
-  t: (k: string, v?: Record<string, string | number>) => string;
-}) {
-  const lane = block.lane || (block.role === "assistant" ? "assistant" : block.role === "user" ? "user" : "system");
-  const mine = lane === "assistant" || block.source === "reply";
-  const rawKind = block.title || (block.kind && block.kind !== "text" ? block.kind : undefined);
-  const kindTitle =
-    block.kind === "tool_use"
-      ? `${t("tag.tool_use")}${block.title ? ` · ${block.title}` : ""}`
-      : block.kind === "tool_result"
-        ? t("tag.tool_result")
-        : tagLabel(t, rawKind);
-  const extra = block.truncated ? ` · ${t("desk.truncated")}` : "";
-
-  if (lane === "system" || lane === "meta" || lane === "tool") {
-    const title =
-      kindTitle || (t(`blk.${block.role}`) !== `blk.${block.role}` ? t(`blk.${block.role}`) : block.role);
-    return (
-      <article className={`msg meta lane-${lane}${block.collapsed ? " collapsed" : ""}`}>
-        <button
-          type="button"
-          className="msg-head"
-          onClick={(e) => e.currentTarget.parentElement?.classList.toggle("collapsed")}
-        >
-          {title}{extra}
-        </button>
-        <BlockBody block={block} />
-      </article>
-    );
-  }
-
-  return (
-    <article className={`msg ${lane}${mine ? " you" : ""}`}>
-      {kindTitle ? <div className="msg-kind">{kindTitle}{extra}</div> : extra ? <div className="msg-kind">{t("desk.truncated")}</div> : null}
-      <BlockBody block={block} />
-    </article>
-  );
 }
 
 function Sessions({

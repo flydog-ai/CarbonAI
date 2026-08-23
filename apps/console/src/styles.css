@@ -364,8 +364,71 @@ textarea { min-height: 108px; resize: vertical; }
 .msg.lane-tool { background: var(--tool); }
 .msg.meta .msg-head { cursor: pointer; width: 100%; }
 .msg.collapsed pre { max-height: 4.4em; overflow: hidden; opacity: .75; }
+.msg.collapsed .event-body { display: none; }
 .msg.meta pre, .msg.lane-system pre, .msg.lane-tool pre {
   font-family: "Red Hat Mono", ui-monospace, monospace; font-size: 12.5px;
+}
+.event {
+  align-self: stretch; max-width: none; padding: 0; overflow: hidden;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: none; color: var(--ink);
+}
+.event-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 12px; margin: 0; border: 0; background: color-mix(in srgb, var(--ink) 3%, var(--card));
+  cursor: pointer; text-align: left; font-family: inherit; color: inherit;
+}
+.event-head:hover { background: var(--hover); }
+.event-kind {
+  font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted);
+}
+.event-name {
+  font-family: "Red Hat Mono", ui-monospace, monospace; font-size: 13px; font-weight: 700; color: var(--primary);
+}
+.event-path, .event-extra {
+  font-family: "Red Hat Mono", ui-monospace, monospace; font-size: 12px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.event-path { margin-left: auto; max-width: 45%; }
+.event-body { padding: 10px 12px 12px; }
+.event-file {
+  margin: 0 0 8px; font-family: "Red Hat Mono", ui-monospace, monospace; font-size: 12px; color: var(--ink-2);
+}
+.event-code, .event-quote, .mini-diff pre {
+  margin: 0; padding: 8px 10px; border-radius: 8px;
+  font-family: "Red Hat Mono", ui-monospace, monospace; font-size: 12.5px; line-height: 1.45;
+  white-space: pre-wrap; word-break: break-word;
+  background: color-mix(in srgb, var(--ink) 4%, var(--card));
+}
+.mini-diff { display: grid; gap: 6px; margin: 0 0 8px; }
+.mini-diff .del { background: color-mix(in srgb, var(--danger) 12%, var(--card)); }
+.mini-diff .add { background: color-mix(in srgb, var(--ok) 14%, var(--card)); }
+.mini-diff pre::before {
+  content: attr(data-label); display: block; font-size: 10px; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
+  font-family: inherit;
+}
+.event-lead { margin: 0 0 6px; font-size: 14px; font-weight: 650; }
+.event-note { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.event-prose { margin: 0; font-size: 14px; line-height: 1.5; }
+.event-dot {
+  width: 8px; height: 8px; border-radius: 99px; flex-shrink: 0;
+}
+.event-dot.ok { background: var(--ok); }
+.event-dot.err { background: var(--danger); }
+.tool-result.is-ok { border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+.tool-result.is-error { border-color: var(--danger-line); }
+.tool-result.is-error .event-head { background: var(--danger-bg); }
+.tool-result.is-ok .event-head { background: var(--ok-bg); }
+.reminder .event-head { background: var(--soft); }
+.token-chip {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 999px; background: var(--live-bg); color: var(--live);
+  font-size: 11px; font-weight: 650; font-family: "Red Hat Mono", ui-monospace, monospace;
+}
+.token-chip.sm { font-size: 11px; }
+body[data-lang="zh"] .event-kind, body[data-lang="zh"] .mini-diff pre::before {
+  text-transform: none; letter-spacing: 0.04em;
 }
 .kv { margin: 0; display: grid; gap: 6px; }
 .kv-row { display: grid; grid-template-columns: minmax(92px, 38%) 1fr; gap: 8px; align-items: start; }

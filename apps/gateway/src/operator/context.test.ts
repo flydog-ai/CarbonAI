@@ -162,5 +162,61 @@ describe("operator context", () => {
     expect(page.reply[0]?.title).toBe("Bash");
     expect(page.reply[0]?.excerpt).toContain('"command": "ls"');
     expect(page.reply[0]?.collapsed).toBe(false);
+    expect(page.reply[0]?.fields).toEqual([{ key: "command", value: "ls" }]);
+  });
+
+  test("Edit tool_use flattens path and replace strings; reminder strips nested token tags", () => {
+    const req = emptyNormalizedRequest({
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "text",
+              text: "<system-reminder>\n<total_tokens>15000000 tokens left</total_tokens>\n哈哈\n</system-reminder>",
+            },
+            {
+              type: "tool_use",
+              kind: "anthropic_tool_use",
+              id: "t1",
+              callId: "t1",
+              name: "Edit",
+              payload: {
+                form: "json",
+                value: {
+                  file_path: "/tmp/a.md",
+                  old_string: "嘿嘿嘿",
+                  new_string: "你你你",
+                  replace_all: false,
+                },
+              },
+            },
+            {
+              type: "tool_result",
+              kind: "anthropic_tool_use",
+              toolUseId: "t1",
+              isError: true,
+              content: [{ type: "text", text: "<tool_use_error>String to replace not found in file.\nString: 嘿嘿嘿</tool_use_error>" }],
+            },
+          ],
+        },
+      ],
+    });
+    const chat = flattenMessages(req);
+    const reminder = chat.find((b) => b.kind === "system-reminder");
+    expect(reminder?.excerpt).toBe("哈哈");
+    expect(reminder?.fields?.some((f) => f.key === "total_tokens" && f.value.includes("15000000"))).toBe(true);
+    expect(reminder?.collapsed).toBe(false);
+    const edit = chat.find((b) => b.kind === "tool_use" && b.title === "Edit");
+    expect(edit?.fields).toEqual([
+      { key: "file_path", value: "/tmp/a.md" },
+      { key: "old_string", value: "嘿嘿嘿" },
+      { key: "new_string", value: "你你你" },
+      { key: "replace_all", value: "false" },
+    ]);
+    const result = chat.find((b) => b.kind === "tool_result");
+    expect(result?.status).toBe("error");
+    expect(result?.excerpt).toContain("String to replace not found");
+    expect(result?.excerpt).not.toContain("<tool_use_error>");
   });
 });

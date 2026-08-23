@@ -9,6 +9,7 @@ import {
   type ContentPart,
   type NormalizedRequest,
   type PublicTool,
+  type ToolPayload,
 } from "@carbon-ai/protocol";
 
 const SYS_EXCERPT = 500;
@@ -27,6 +28,7 @@ export type ContextBlock = {
   tokenEst: number;
   truncated: boolean;
   source: "request" | "reply";
+  status?: "ok" | "error";
   fields?: { key: string; value: string }[];
 };
 
@@ -78,6 +80,69 @@ function laneFor(role: ContextBlock["role"], kind: string): ContextLane {
   return "user";
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function objectFields(value: unknown): { key: string; value: string }[] | undefined {
+  const rec = asRecord(value);
+  if (!rec) return undefined;
+  const rows = Object.entries(rec).map(([key, v]) => ({
+    key,
+    value: typeof v === "string" ? v : v == null ? "" : typeof v === "object" ? JSON.stringify(v, null, 2) : String(v),
+  }));
+  return rows.length ? rows : undefined;
+}
+
+export function fieldsFromPayload(payload: ToolPayload): { key: string; value: string }[] | undefined {
+  switch (payload.form) {
+    case "json":
+      return objectFields(payload.value);
+    case "apply_patch": {
+      const op = payload.operation;
+      const rows = [
+        { key: "type", value: op.type },
+        { key: "path", value: op.path },
+      ];
+      if ("diff" in op && op.diff) rows.push({ key: "diff", value: op.diff });
+      return rows;
+    }
+    case "local_shell":
+      return objectFields(payload.action);
+    case "shell":
+      return objectFields(payload.action);
+    case "freeform":
+      return undefined;
+  }
+}
+
+function reminderInner(raw: string): { excerpt: string; fields?: { key: string; value: string }[] } {
+  const segs = splitMarkup(raw);
+  const fields: { key: string; value: string }[] = [];
+  const prose: string[] = [];
+  for (const s of segs) {
+    if (s.kind === "text") {
+      const body = s.text.replace(/^\n+|\n+$/g, "");
+      if (body.trim()) prose.push(body);
+      continue;
+    }
+    fields.push({ key: s.name ?? "tag", value: s.text.trim() });
+  }
+  if (!fields.length) return { excerpt: raw };
+  return { excerpt: prose.join("\n"), fields };
+}
+
+function resultShape(raw: string, isError?: boolean): { excerpt: string; status?: "ok" | "error" } {
+  const segs = splitMarkup(raw);
+  const err = segs.find((s) => s.kind === "tag" && (s.name === "tool_use_error" || s.name === "error"));
+  if (err) return { excerpt: err.text.trim() || raw, status: "error" };
+  if (isError) return { excerpt: raw, status: "error" };
+  if (/not found|error:/i.test(raw)) return { excerpt: raw, status: "error" };
+  return { excerpt: raw, status: "ok" };
+}
+
 function fieldsFor(kind: string, raw: string): { key: string; value: string }[] | undefined {
   const k = kind.toLowerCase();
   if (k === "env" || k === "user_info" || k === "user-info") {
@@ -92,22 +157,40 @@ function makeBlock(
   role: ContextBlock["role"],
   kind: string,
   raw: string,
-  opts: { collapsed?: boolean; title?: string; source?: "request" | "reply"; max?: number } = {},
+  opts: {
+    collapsed?: boolean;
+    title?: string;
+    source?: "request" | "reply";
+    max?: number;
+    fields?: { key: string; value: string }[];
+    status?: "ok" | "error";
+  } = {},
 ): ContextBlock {
-  const max = opts.max ?? (laneFor(role, kind) === "user" || laneFor(role, kind) === "assistant" ? INLINE_LIMIT : SYS_EXCERPT);
-  const { excerpt, truncated } = clip(raw, Math.min(max, INLINE_LIMIT));
-  const fields = fieldsFor(kind, raw);
+  const lane = laneFor(role, kind);
+  let excerptSrc = raw;
+  let fields = opts.fields ?? fieldsFor(kind, raw);
+  if (kind === "system-reminder") {
+    const inner = reminderInner(raw);
+    excerptSrc = inner.excerpt;
+    fields = opts.fields ?? inner.fields;
+  }
+  const max = opts.max ?? (lane === "user" || lane === "assistant" ? INLINE_LIMIT : SYS_EXCERPT);
+  const { excerpt, truncated } = clip(excerptSrc, Math.min(max, INLINE_LIMIT));
+  const autoCollapse = lane === "system" || lane === "meta";
+  const shortMeta = kind === "system-reminder" && excerptSrc.length < 280;
+  const collapse = opts.collapsed ?? autoCollapse;
   return {
     index,
     role,
     kind,
-    lane: laneFor(role, kind),
+    lane,
     title: opts.title,
-    collapsed: opts.collapsed ?? (laneFor(role, kind) === "system" || laneFor(role, kind) === "meta"),
+    collapsed: collapse && !shortMeta,
     excerpt,
     tokenEst: estimateTextTokens(raw),
     truncated,
     source: opts.source ?? "request",
+    ...(opts.status ? { status: opts.status } : {}),
     ...(fields ? { fields } : {}),
   };
 }
@@ -144,12 +227,16 @@ function pushText(
       kind === "tool_result" ? "tool" : kind === "tool_use" ? "assistant" : role;
     const title =
       kind === "tool_use" ? (part.name ?? part.kind) : kind === "tool_result" ? "tool_result" : undefined;
+    const result = kind === "tool_result" ? resultShape(textOf(part), part.isError) : undefined;
+    const raw = result?.excerpt ?? textOf(part);
     blocks.push(
-      makeBlock(blocks.length, roleForPart, kind, textOf(part), {
+      makeBlock(blocks.length, roleForPart, kind, raw, {
         collapsed: kind === "thinking" || kind === "reasoning" || collapsed,
         title,
         source,
         max: kind === "tool_use" || kind === "tool_result" ? INLINE_LIMIT : undefined,
+        fields: kind === "tool_use" ? fieldsFromPayload(part.payload) : undefined,
+        status: result?.status,
       }),
     );
     return;
@@ -219,6 +306,7 @@ export function flattenReply(output: AssistantOutput | undefined): ContextBlock[
           title: b.name ?? b.kind,
           source: "reply",
           max: INLINE_LIMIT,
+          fields: fieldsFromPayload(b.payload),
         }),
       );
     }
