@@ -33,6 +33,8 @@ This is a **production-grade open-source gateway**, not a POC, not a toy, not "g
 - 按正规后端做：不透明的 session id、哈希密钥、明确过期、退出真的删会话、停用账号后 cookie 不能继续用。Cookie 寿命和服务器寿命必须一致。
 - Prefer the architecture you would defend in a review over the patch that is fastest to type. If a shortcut will surprise an operator after `bun --watch` or a gateway restart, do not ship it.
 - 选能在 review 里讲得通的结构，不要选最好写的补丁。如果一改代码或一重启，操作者会感到被耍，就不要交。
+- Logo and brand marks start as **SVG prototypes**. Do not generate a raster and reverse-engineer it. After a mark is chosen, wire favicon and UI from that SVG.
+- Logo 和品牌标先出 **SVG 原型**。不要先生成位图再倒推。定稿后再把这份 SVG 接到 favicon 和界面。
 
 ---
 

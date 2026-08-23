@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { join } from "node:path";
 import type { Config } from "@carbon-ai/config";
 import type { CarbonDb } from "@carbon-ai/db";
 import { claudeModelSlots } from "@carbon-ai/protocol";
@@ -9,8 +10,17 @@ import {
 } from "../home/cc-switch.ts";
 import { renderHomePage } from "../home/page.ts";
 
+const FAVICON = join(import.meta.dir, "../home/favicon.svg");
+
 export function homeRoutes(cfg: Config, db?: CarbonDb): Hono {
   const app = new Hono();
+  app.get("/favicon.svg", async () => {
+    const file = Bun.file(FAVICON);
+    if (!(await file.exists())) return new Response("not found", { status: 404 });
+    return new Response(file, {
+      headers: { "content-type": "image/svg+xml; charset=UTF-8", "cache-control": "public, max-age=86400" },
+    });
+  });
   app.get("/api/site", (c) =>
     c.json({
       name: cfg.site.name,

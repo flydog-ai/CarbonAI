@@ -1,4 +1,5 @@
 export type Lang = "en" | "zh";
+export type Theme = "light" | "dark";
 
 export type View = "home" | "desk" | "keys" | "users" | "settings";
 

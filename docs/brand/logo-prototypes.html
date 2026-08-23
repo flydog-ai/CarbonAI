@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Carbon AI · logo SVG prototypes</title>
+  <style>
+    :root {
+      --ink: #161b1f;
+      --paper: #eef1f3;
+      --muted: #667178;
+      --line: #d4dce0;
+      --tile: #161b1f;
+      --cyan: #6ec9c4;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Red Hat Text", "PingFang SC", "Noto Sans SC", sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      padding: 32px 28px 64px;
+    }
+    h1 { font-family: Oswald, "Noto Sans SC", "PingFang SC", sans-serif; font-weight: 600; letter-spacing: 0.04em; font-size: 1.6rem; margin: 0 0 6px; }
+    .lede { color: var(--muted); margin: 0 0 28px; max-width: 62ch; line-height: 1.55; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+    article {
+      background: #f7f9fa;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    article h2 { margin: 0 0 4px; font-size: 15px; }
+    article p { margin: 0 0 14px; font-size: 13px; color: var(--muted); line-height: 1.45; }
+    .row { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+    .on-dark, .on-light {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      padding: 12px; border-radius: 12px;
+    }
+    .on-dark { background: #101417; }
+    .on-light { background: #fff; border: 1px solid var(--line); }
+    .sizes { display: flex; align-items: flex-end; gap: 8px; }
+    svg.mark { display: block; }
+    .s16 { width: 16px; height: 16px; }
+    .s24 { width: 24px; height: 24px; }
+    .s32 { width: 32px; height: 32px; }
+    .s48 { width: 48px; height: 48px; }
+    .s96 { width: 96px; height: 96px; }
+    footer { margin-top: 28px; font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>Carbon AI logo · SVG prototypes</h1>
+  <p class="lede">
+    Graphite tile, quartz-cyan stroke. Each mark is a carbon hexagon opened into a C.
+    Compare at favicon size (16) and UI size (32 / 48). Live site currently uses <strong>C</strong>.
+    石墨底、石英青描边。开口六边形即 C。站点现在用的是 C。
+  </p>
+  <div class="grid">
+
+    <article>
+      <h2>A · Lattice C</h2>
+      <p>Open hex, inner ring, quartz core. 开口六边 + 内环 + 核。</p>
+      <div class="row">
+        <div class="on-dark"><svg class="mark s96" viewBox="0 0 32 32">
+          <rect width="32" height="32" rx="8" fill="#161b1f"/>
+          <path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M18.6 20.503 13.4 20.503 10.8 16 13.4 11.497 18.6 11.497" fill="none" stroke="#6ec9c4" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+          <polygon fill="#6ec9c4" points="18.4,16 17.2,18.078 14.8,18.078 13.6,16 14.8,13.922 17.2,13.922"/>
+        </svg></div>
+        <div class="on-light"><svg class="mark s48" viewBox="0 0 32 32">
+          <rect width="32" height="32" rx="8" fill="#161b1f"/>
+          <path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M18.6 20.503 13.4 20.503 10.8 16 13.4 11.497 18.6 11.497" fill="none" stroke="#6ec9c4" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+          <polygon fill="#6ec9c4" points="18.4,16 17.2,18.078 14.8,18.078 13.6,16 14.8,13.922 17.2,13.922"/>
+        </svg></div>
+        <div class="sizes on-dark">
+          <svg class="mark s32" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.6 20.503 13.4 20.503 10.8 16 13.4 11.497 18.6 11.497" fill="none" stroke="#6ec9c4" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/><polygon fill="#6ec9c4" points="18.4,16 17.2,18.078 14.8,18.078 13.6,16 14.8,13.922 17.2,13.922"/></svg>
+          <svg class="mark s16" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.6 20.503 13.4 20.503 10.8 16 13.4 11.497 18.6 11.497" fill="none" stroke="#6ec9c4" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/><polygon fill="#6ec9c4" points="18.4,16 17.2,18.078 14.8,18.078 13.6,16 14.8,13.922 17.2,13.922"/></svg>
+        </div>
+      </div>
+    </article>
+
+    <article>
+      <h2>B · Stroke C</h2>
+      <p>One open hexagon, nothing inside. Reads at 16px. 单层开口六边，最小 favicon。</p>
+      <div class="row">
+        <div class="on-dark"><svg class="mark s96" viewBox="0 0 32 32">
+          <rect width="32" height="32" rx="8" fill="#161b1f"/>
+          <path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg></div>
+        <div class="on-light"><svg class="mark s48" viewBox="0 0 32 32">
+          <rect width="32" height="32" rx="8" fill="#161b1f"/>
+          <path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg></div>
+        <div class="sizes on-dark">
+          <svg class="mark s32" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg class="mark s16" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+    </article>
+
+    <article>
+      <h2>C · Atom C</h2>
+      <p>Open hex plus a quartz nucleus. No inner ring. Live mark. 开口六边 + 核。现网。</p>
+      <div class="row">
+        <div class="on-dark"><svg class="mark s96" viewBox="0 0 32 32">
+          <rect width="32" height="32" rx="8" fill="#161b1f"/>
+          <path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <polygon fill="#6ec9c4" points="18.4,16 17.2,18.078 14.8,18.078 13.6,16 14.8,13.922 17.2,13.922"/>
+        </svg></div>
+        <div class="on-light"><svg class="mark s48" viewBox="0 0 32 32">
+          <rect width="32" height="32" rx="8" fill="#161b1f"/>
+          <path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <polygon fill="#6ec9c4" points="18.4,16 17.2,18.078 14.8,18.078 13.6,16 14.8,13.922 17.2,13.922"/>
+        </svg></div>
+        <div class="sizes on-dark">
+          <svg class="mark s32" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><polygon fill="#6ec9c4" points="18.4,16 17.2,18.078 14.8,18.078 13.6,16 14.8,13.922 17.2,13.922"/></svg>
+          <svg class="mark s16" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><polygon fill="#6ec9c4" points="18.4,16 17.2,18.078 14.8,18.078 13.6,16 14.8,13.922 17.2,13.922"/></svg>
+        </div>
+      </div>
+    </article>
+
+    <article>
+      <h2>D · Pointy C</h2>
+      <p>Pointy-top hexagon C (five sides). Taller, more crystal. 尖顶六边 C，更像晶体。</p>
+      <div class="row">
+        <div class="on-dark"><svg class="mark s96" viewBox="0 0 32 32">
+          <rect width="32" height="32" rx="8" fill="#161b1f"/>
+          <path d="M24.66 21 16 26 7.34 21 7.34 11 16 6 24.66 11" fill="none" stroke="#6ec9c4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg></div>
+        <div class="on-light"><svg class="mark s48" viewBox="0 0 32 32">
+          <rect width="32" height="32" rx="8" fill="#161b1f"/>
+          <path d="M24.66 21 16 26 7.34 21 7.34 11 16 6 24.66 11" fill="none" stroke="#6ec9c4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg></div>
+        <div class="sizes on-dark">
+          <svg class="mark s32" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M24.66 21 16 26 7.34 21 7.34 11 16 6 24.66 11" fill="none" stroke="#6ec9c4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg class="mark s16" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M24.66 21 16 26 7.34 21 7.34 11 16 6 24.66 11" fill="none" stroke="#6ec9c4" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+    </article>
+
+    <article>
+      <h2>E · Nodes</h2>
+      <p>Open hex with carbon atoms at the vertices. 开口六边，顶点是碳原子。</p>
+      <div class="row">
+        <div class="on-dark"><svg class="mark s96" viewBox="0 0 32 32">
+          <rect width="32" height="32" rx="8" fill="#161b1f"/>
+          <path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="21" cy="24.66" r="1.55" fill="#6ec9c4"/>
+          <circle cx="11" cy="24.66" r="1.55" fill="#6ec9c4"/>
+          <circle cx="6" cy="16" r="1.55" fill="#6ec9c4"/>
+          <circle cx="11" cy="7.34" r="1.55" fill="#6ec9c4"/>
+          <circle cx="21" cy="7.34" r="1.55" fill="#6ec9c4"/>
+        </svg></div>
+        <div class="on-light"><svg class="mark s48" viewBox="0 0 32 32">
+          <rect width="32" height="32" rx="8" fill="#161b1f"/>
+          <path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="21" cy="24.66" r="1.55" fill="#6ec9c4"/>
+          <circle cx="11" cy="24.66" r="1.55" fill="#6ec9c4"/>
+          <circle cx="6" cy="16" r="1.55" fill="#6ec9c4"/>
+          <circle cx="11" cy="7.34" r="1.55" fill="#6ec9c4"/>
+          <circle cx="21" cy="7.34" r="1.55" fill="#6ec9c4"/>
+        </svg></div>
+        <div class="sizes on-dark">
+          <svg class="mark s32" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="21" cy="24.66" r="1.55" fill="#6ec9c4"/><circle cx="11" cy="24.66" r="1.55" fill="#6ec9c4"/><circle cx="6" cy="16" r="1.55" fill="#6ec9c4"/><circle cx="11" cy="7.34" r="1.55" fill="#6ec9c4"/><circle cx="21" cy="7.34" r="1.55" fill="#6ec9c4"/></svg>
+          <svg class="mark s16" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="21" cy="24.66" r="1.55" fill="#6ec9c4"/><circle cx="11" cy="24.66" r="1.55" fill="#6ec9c4"/><circle cx="6" cy="16" r="1.55" fill="#6ec9c4"/><circle cx="11" cy="7.34" r="1.55" fill="#6ec9c4"/><circle cx="21" cy="7.34" r="1.55" fill="#6ec9c4"/></svg>
+        </div>
+      </div>
+    </article>
+
+    <article>
+      <h2>F · Sheet</h2>
+      <p>Two hex cells sharing an edge: a flake of graphene. 两格蜂窝，一片石墨烯。</p>
+      <div class="row">
+        <div class="on-dark"><svg class="mark s96" viewBox="0 0 32 32">
+          <rect width="32" height="32" rx="8" fill="#161b1f"/>
+          <path d="M9.5 9.5 16 6 22.5 9.5 22.5 16.5 16 20 9.5 16.5 Z" fill="none" stroke="#6ec9c4" stroke-width="1.7" stroke-linejoin="round"/>
+          <path d="M9.5 16.5 16 20 16 27 9.5 23.5 9.5 16.5" fill="none" stroke="#6ec9c4" stroke-width="1.7" stroke-linejoin="round"/>
+          <circle cx="16" cy="16.5" r="1.4" fill="#6ec9c4"/>
+        </svg></div>
+        <div class="on-light"><svg class="mark s48" viewBox="0 0 32 32">
+          <rect width="32" height="32" rx="8" fill="#161b1f"/>
+          <path d="M9.5 9.5 16 6 22.5 9.5 22.5 16.5 16 20 9.5 16.5 Z" fill="none" stroke="#6ec9c4" stroke-width="1.7" stroke-linejoin="round"/>
+          <path d="M9.5 16.5 16 20 16 27 9.5 23.5 9.5 16.5" fill="none" stroke="#6ec9c4" stroke-width="1.7" stroke-linejoin="round"/>
+          <circle cx="16" cy="16.5" r="1.4" fill="#6ec9c4"/>
+        </svg></div>
+        <div class="sizes on-dark">
+          <svg class="mark s32" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M9.5 9.5 16 6 22.5 9.5 22.5 16.5 16 20 9.5 16.5 Z" fill="none" stroke="#6ec9c4" stroke-width="1.7" stroke-linejoin="round"/><path d="M9.5 16.5 16 20 16 27 9.5 23.5 9.5 16.5" fill="none" stroke="#6ec9c4" stroke-width="1.7" stroke-linejoin="round"/><circle cx="16" cy="16.5" r="1.4" fill="#6ec9c4"/></svg>
+          <svg class="mark s16" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M9.5 9.5 16 6 22.5 9.5 22.5 16.5 16 20 9.5 16.5 Z" fill="none" stroke="#6ec9c4" stroke-width="1.7" stroke-linejoin="round"/><path d="M9.5 16.5 16 20 16 27 9.5 23.5 9.5 16.5" fill="none" stroke="#6ec9c4" stroke-width="1.7" stroke-linejoin="round"/><circle cx="16" cy="16.5" r="1.4" fill="#6ec9c4"/></svg>
+        </div>
+      </div>
+    </article>
+
+  </div>
+  <footer>docs/brand/logo-prototypes.html · pick a letter, then we swap favicon and UI from that SVG.</footer>
+</body>
+</html>

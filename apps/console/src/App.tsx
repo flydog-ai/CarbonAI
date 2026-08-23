@@ -13,15 +13,20 @@ import {
   LangSwitch,
   Modal,
   Pill,
+  ThemeSwitch,
 } from "./components.tsx";
 import { detectLang, translate } from "./i18n.ts";
 import { copyText, fmtWhen, groupThreads, initials, isLive, readView, secretPrefix, setViewUrl, threadKey } from "./lib.ts";
-import type { ApiKey, ConnectInfo, ContextBlock, ContextPage, GuestKey, Job, Lang, SiteSettings, User, View } from "./types.ts";
+import { Mark } from "./brand/Mark.tsx";
+import { applyTheme, detectTheme, persistTheme, themeIsLocked } from "./theme.ts";
+import type { ApiKey, ConnectInfo, ContextBlock, ContextPage, GuestKey, Job, Lang, SiteSettings, Theme, User, View } from "./types.ts";
 
 type Gate = "boot" | "setup" | "login" | "app";
 
 export function App() {
   const [lang, setLangState] = useState<Lang>(detectLang);
+  const [theme, setTheme] = useState<Theme>(detectTheme);
+  const themeLocked = useRef(themeIsLocked());
   const [gate, setGate] = useState<Gate>("boot");
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [user, setUser] = useState<User | null>(null);
@@ -43,6 +48,23 @@ export function App() {
     document.body.dataset.lang = lang;
     document.title = t("docTitle");
   }, [lang, t]);
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
+    if (themeLocked.current) return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => {
+      if (themeLocked.current) return;
+      const next = mq.matches ? "dark" : "light";
+      setTheme(next);
+      applyTheme(next);
+    };
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -105,6 +127,12 @@ export function App() {
     localStorage.setItem("carbon-lang", next);
   }
 
+  function changeTheme(next: Theme) {
+    themeLocked.current = true;
+    setTheme(next);
+    persistTheme(next);
+  }
+
   function flash(msg: string) {
     setToast(msg);
     window.setTimeout(() => setToast(""), 2200);
@@ -124,14 +152,20 @@ export function App() {
   };
 
   if (gate === "boot") return null;
-  if (gate === "setup") return <Setup t={t} lang={lang} brand={brand} onLang={changeLang} onDone={(s) => void boot(s)} />;
+  if (gate === "setup") {
+    return (
+      <Setup t={t} lang={lang} theme={theme} brand={brand} onLang={changeLang} onTheme={changeTheme} onDone={(s) => void boot(s)} />
+    );
+  }
   if (gate === "login") {
     return (
       <Login
         t={t}
         lang={lang}
+        theme={theme}
         brand={brand}
         onLang={changeLang}
+        onTheme={changeTheme}
         mode={authMode}
         setMode={setAuthMode}
         onDone={(s) => void boot(s)}
@@ -147,7 +181,7 @@ export function App() {
       {sbOpen ? <div className="overlay" onClick={() => setSbOpen(false)} /> : null}
       <aside className="sidebar">
         <div className="brand">
-          <span className="mark">C</span>
+          <Mark />
           <div className="brand-text">
             <strong>{brand}</strong>
             <small>{t("brand.sub")}</small>
@@ -221,6 +255,7 @@ export function App() {
             </div>
           </div>
           <div className="header-right">
+            <ThemeSwitch theme={theme} onChange={changeTheme} t={t} />
             <LangSwitch lang={lang} onChange={changeLang} />
             <div className="who-wrap">
               <button
@@ -277,20 +312,25 @@ export function App() {
 function Setup({
   t,
   lang,
+  theme,
   brand,
   onLang,
+  onTheme,
   onDone,
 }: {
   t: (k: string, v?: Record<string, string | number>) => string;
   lang: Lang;
+  theme: Theme;
   brand: string;
   onLang: (l: Lang) => void;
+  onTheme: (theme: Theme) => void;
   onDone: (secret?: string) => void;
 }) {
   const [err, setErr] = useState("");
   return (
     <div className="gate">
       <div className="lang-bar">
+        <ThemeSwitch theme={theme} onChange={onTheme} t={t} />
         <LangSwitch lang={lang} onChange={onLang} />
       </div>
       <form
@@ -313,7 +353,7 @@ function Setup({
           onDone(body.apiKey);
         }}
       >
-        <div className="mark lg">C</div>
+        <Mark large />
         <p className="brand-name">{brand}</p>
         <h1 style={{ textAlign: "center" }}>{t("setup.title")}</h1>
         <p className="sub" style={{ textAlign: "center" }}>{t("setup.sub")}</p>
@@ -334,16 +374,20 @@ function Setup({
 function Login({
   t,
   lang,
+  theme,
   brand,
   onLang,
+  onTheme,
   mode,
   setMode,
   onDone,
 }: {
   t: (k: string, v?: Record<string, string | number>) => string;
   lang: Lang;
+  theme: Theme;
   brand: string;
   onLang: (l: Lang) => void;
+  onTheme: (theme: Theme) => void;
   mode: "login" | "register";
   setMode: (m: "login" | "register") => void;
   onDone: (secret?: string) => void;
@@ -353,6 +397,7 @@ function Login({
   return (
     <div className="gate">
       <div className="lang-bar">
+        <ThemeSwitch theme={theme} onChange={onTheme} t={t} />
         <LangSwitch lang={lang} onChange={onLang} />
       </div>
       <form
@@ -383,7 +428,7 @@ function Login({
           onDone(body.apiKey);
         }}
       >
-        <div className="mark lg">C</div>
+        <Mark large />
         <p className="brand-name">{brand}</p>
         <h1 style={{ textAlign: "center" }}>{t(mode === "register" ? "register.title" : "login.title")}</h1>
         <p className="sub" style={{ textAlign: "center" }}>{t(mode === "register" ? "register.sub" : "login.sub")}</p>

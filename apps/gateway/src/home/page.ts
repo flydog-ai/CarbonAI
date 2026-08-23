@@ -34,10 +34,11 @@ export function renderHomePage(data: HomePageData): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${siteName} · ${siteNameZh}</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23c44914'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='15' fill='%23f1e6d0' font-family='Georgia,serif'%3EC%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Red+Hat+Mono:wght@400;600&family=Red+Hat+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Red+Hat+Mono:wght@400;600&family=Red+Hat+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script>
     (function () {
       try {
@@ -46,21 +47,56 @@ export function renderHomePage(data: HomePageData): string {
         document.documentElement.lang = l === "zh" ? "zh-CN" : "en";
         document.documentElement.dataset.lang = l;
       } catch (e) {}
+      var saved = null;
+      try { saved = localStorage.getItem("carbon-theme"); } catch (e) {}
+      var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var theme = saved === "light" || saved === "dark" ? saved : dark ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", theme);
+      document.documentElement.style.colorScheme = theme;
     })();
   </script>
   <style>
-    :root {
-      --bg: #f3f4f6;
-      --card: #ffffff;
-      --ink: #111827;
-      --muted: #6b7280;
-      --line: #e5e7eb;
-      --primary: #c44914;
-      --primary-2: #9a3410;
-      --soft: #fdf0e9;
-      --ok: #059669;
-      --shadow: 0 1px 2px rgb(17 24 39 / 5%), 0 10px 24px rgb(17 24 39 / 5%);
-      --shadow-lg: 0 20px 50px rgb(17 24 39 / 16%);
+    :root, [data-theme="light"] {
+      color-scheme: light;
+      --bg: #eef1f3;
+      --bg-2: #e3e8eb;
+      --card: #f7f9fa;
+      --ink: #161b1f;
+      --muted: #667178;
+      --line: #d4dce0;
+      --primary: #1f6b72;
+      --primary-2: #15555b;
+      --primary-ink: #f2fbfb;
+      --soft: #e3f0f1;
+      --ok: #2f7d5b;
+      --hover: #e8eef0;
+      --secret: #161b1f;
+      --secret-ink: #e8eef0;
+      --toast: #161b1f;
+      --toast-ink: #f2fbfb;
+      --shadow: 0 1px 2px rgb(22 27 31 / 6%), 0 10px 24px rgb(22 27 31 / 6%);
+      --shadow-lg: 0 20px 50px rgb(22 27 31 / 14%);
+    }
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #101417;
+      --bg-2: #171c20;
+      --card: #1a2024;
+      --ink: #e6eef1;
+      --muted: #8a99a1;
+      --line: #2c353b;
+      --primary: #6ec9c4;
+      --primary-2: #8ad9d4;
+      --primary-ink: #0c1a1b;
+      --soft: #1a2c2e;
+      --ok: #6ec89a;
+      --hover: #22292e;
+      --secret: #0c0f12;
+      --secret-ink: #e6eef1;
+      --toast: #e6eef1;
+      --toast-ink: #101417;
+      --shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 10px 24px rgb(0 0 0 / 28%);
+      --shadow-lg: 0 20px 50px rgb(0 0 0 / 45%);
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; min-height: 100%; }
@@ -68,14 +104,14 @@ export function renderHomePage(data: HomePageData): string {
       font-family: "Red Hat Text", "PingFang SC", "Noto Sans SC", sans-serif;
       color: var(--ink);
       background:
-        radial-gradient(720px 420px at 110% -10%, rgb(196 73 20 / 12%), transparent 60%),
-        radial-gradient(640px 380px at -10% 110%, rgb(196 73 20 / 8%), transparent 55%),
-        linear-gradient(180deg, #faf7f4 0%, var(--bg) 48%);
+        radial-gradient(720px 420px at 110% -10%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 60%),
+        radial-gradient(640px 380px at -10% 110%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 55%),
+        linear-gradient(180deg, var(--soft) 0%, var(--bg) 48%);
     }
     body::before {
       content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .4;
-      background-image: linear-gradient(rgb(196 73 20 / 4%) 1px, transparent 1px),
-        linear-gradient(90deg, rgb(196 73 20 / 4%) 1px, transparent 1px);
+      background-image: linear-gradient(color-mix(in srgb, var(--primary) 8%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--primary) 8%, transparent) 1px, transparent 1px);
       background-size: 48px 48px;
     }
     a { color: var(--primary); text-decoration: none; }
@@ -89,15 +125,19 @@ export function renderHomePage(data: HomePageData): string {
     .brand:hover { text-decoration: none; }
     .mark {
       width: 36px; height: 36px; border-radius: 10px;
-      background: var(--primary); color: #f8eadc;
-      display: grid; place-items: center;
-      font-family: Fraunces, Georgia, serif; font-weight: 700; font-size: 18px;
+      overflow: hidden; display: block; line-height: 0; background: #161b1f; flex: 0 0 36px;
     }
-    .brand strong { font-family: Fraunces, Georgia, serif; font-size: 1.05rem; }
+    .mark svg { width: 100%; height: 100%; display: block; }
+    .brand strong {
+      font-family: Oswald, "Noto Sans SC", "PingFang SC", sans-serif;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      font-size: 1.1rem;
+    }
     .nav { display: flex; align-items: center; gap: 8px; }
     .lang-switch {
       display: inline-flex; border: 1px solid var(--line); border-radius: 999px;
-      overflow: hidden; background: #fff; padding: 2px;
+      overflow: hidden; background: var(--card); padding: 2px;
     }
     .lang-switch button {
       border: 0; background: transparent; cursor: pointer; padding: 5px 10px;
@@ -109,10 +149,10 @@ export function renderHomePage(data: HomePageData): string {
       border: 0; cursor: pointer; font-weight: 600; border-radius: 10px;
       padding: 10px 16px; font-family: inherit; font-size: 14px; white-space: nowrap;
     }
-    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary { background: var(--primary); color: var(--primary-ink); }
     .btn-primary:hover { background: var(--primary-2); text-decoration: none; }
-    .btn-secondary { background: #fff; color: var(--ink); border: 1px solid var(--line); }
-    .btn-secondary:hover { background: #f9fafb; text-decoration: none; }
+    .btn-secondary { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+    .btn-secondary:hover { background: var(--hover); text-decoration: none; }
     .btn-sm { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
     main { flex: 1; padding: 28px 7vw 64px; }
     .hero {
@@ -122,14 +162,15 @@ export function renderHomePage(data: HomePageData): string {
     .kicker {
       display: inline-flex; align-items: center; gap: 8px;
       font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-      color: var(--primary); background: var(--soft); border: 1px solid #f0c7b0;
+      color: var(--primary); background: var(--soft); border: 1px solid var(--line);
       border-radius: 999px; padding: 4px 10px; margin: 0 0 16px;
     }
     html[data-lang="zh"] .kicker { text-transform: none; letter-spacing: .04em; }
     h1 {
-      font-family: Fraunces, Georgia, serif;
-      font-size: clamp(2.4rem, 5vw, 3.6rem);
-      letter-spacing: -0.04em; line-height: 1.05; margin: 0 0 14px;
+      font-family: Oswald, "Noto Sans SC", "PingFang SC", sans-serif;
+      font-weight: 600;
+      font-size: clamp(2.6rem, 5.5vw, 3.8rem);
+      letter-spacing: 0.03em; line-height: 1.05; margin: 0 0 14px;
     }
     .lede { margin: 0 0 22px; font-size: 1.08rem; line-height: 1.6; color: var(--muted); max-width: 40ch; }
     .cta-row { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -139,7 +180,7 @@ export function renderHomePage(data: HomePageData): string {
     }
     .panel-head {
       display: flex; align-items: center; justify-content: space-between; gap: 10px;
-      padding: 14px 18px; border-bottom: 1px solid var(--line); background: #fafafa;
+      padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--bg-2);
     }
     .dots { display: flex; gap: 6px; }
     .dots i { width: 10px; height: 10px; border-radius: 999px; display: block; }
@@ -148,22 +189,22 @@ export function renderHomePage(data: HomePageData): string {
     .panel-body { padding: 18px 18px 16px; }
     .row {
       display: grid; grid-template-columns: 92px 1fr auto; gap: 8px; align-items: center;
-      padding: 8px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px;
+      padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px;
     }
     .row:last-of-type { border-bottom: 0; }
     .row span { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
     html[data-lang="zh"] .row span { text-transform: none; letter-spacing: .04em; }
     .mono { font-family: "Red Hat Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
     .loop {
-      margin: 14px 0 0; background: #111827; color: #e5e7eb; border-radius: 12px;
+      margin: 14px 0 0; background: var(--secret); color: var(--secret-ink); border-radius: 12px;
       padding: 12px 14px; font-family: "Red Hat Mono", ui-monospace, monospace; font-size: 12px; line-height: 1.7;
     }
-    .loop .ok { color: #34d399; } .loop .wait { color: #fbbf24; } .loop .cmd { color: #93c5fd; }
+    .loop .ok { color: var(--ok); } .loop .wait { color: var(--primary); } .loop .cmd { color: #7eb8e8; }
     .hint { margin: 12px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
     .pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; max-width: 1120px; margin: 0 auto 36px; }
     .pill {
       display: inline-flex; align-items: center; gap: 8px;
-      background: #fff; border: 1px solid var(--line); border-radius: 999px;
+      background: var(--card); border: 1px solid var(--line); border-radius: 999px;
       padding: 8px 14px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow);
     }
     .pill i { width: 8px; height: 8px; border-radius: 999px; background: var(--primary); display: block; }
@@ -185,18 +226,18 @@ export function renderHomePage(data: HomePageData): string {
     .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
     .chip {
       display: inline-flex; align-items: center; gap: 8px;
-      background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-size: 13px; font-weight: 600;
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-size: 13px; font-weight: 600;
     }
     .chip .badge { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: var(--ok); color: #fff; border-radius: 999px; padding: 2px 7px; }
     html[data-lang="zh"] .chip .badge { text-transform: none; }
-    .chip .soon { background: #f3f4f6; color: var(--muted); }
+    .chip .soon { background: var(--bg-2); color: var(--muted); }
     footer {
       border-top: 1px solid var(--line); padding: 18px 7vw; display: flex; flex-wrap: wrap;
-      justify-content: space-between; gap: 10px; color: var(--muted); font-size: 13px; background: rgb(255 255 255 / 55%);
+      justify-content: space-between; gap: 10px; color: var(--muted); font-size: 13px; background: color-mix(in srgb, var(--card) 70%, transparent);
     }
     .toast {
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: #111827; color: #fff; padding: 10px 14px; border-radius: 10px; font-size: 13px;
+      background: var(--toast); color: var(--toast-ink); padding: 10px 14px; border-radius: 10px; font-size: 13px;
       opacity: 0; pointer-events: none; transition: opacity .2s;
     }
     .toast.on { opacity: 1; }
@@ -211,10 +252,14 @@ export function renderHomePage(data: HomePageData): string {
   <div class="wrap">
     <header>
       <a class="brand" href="/">
-        <span class="mark">C</span>
+        <span class="mark" aria-hidden="true"><svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="8" fill="#161b1f"/><path d="M21 24.66 11 24.66 6 16 11 7.34 21 7.34" fill="none" stroke="#6ec9c4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><polygon fill="#6ec9c4" points="18.4,16 17.2,18.078 14.8,18.078 13.6,16 14.8,13.922 17.2,13.922"/></svg></span>
         <strong>${siteName}</strong>
       </a>
       <div class="nav">
+        <div class="lang-switch" role="group" aria-label="Appearance">
+          <button type="button" data-set-theme="light" data-i18n="theme.light">Light</button>
+          <button type="button" data-set-theme="dark" data-i18n="theme.dark">Dark</button>
+        </div>
         <div class="lang-switch" role="group">
           <button type="button" data-set-lang="en">English</button>
           <button type="button" data-set-lang="zh">中文</button>
@@ -344,6 +389,8 @@ export function renderHomePage(data: HomePageData): string {
         soon: "next",
         copied: "Copied",
         copyFailed: "Copy failed — select the text instead",
+        "theme.light": "Light",
+        "theme.dark": "Dark",
       },
       zh: {
         "nav.console": "控制台",
@@ -376,6 +423,8 @@ export function renderHomePage(data: HomePageData): string {
         soon: "接下来",
         copied: "已复制",
         copyFailed: "复制失败，请手动选中文本",
+        "theme.light": "浅色",
+        "theme.dark": "深色",
       }
     };
     function detectLang() {
@@ -398,6 +447,21 @@ export function renderHomePage(data: HomePageData): string {
       });
       try { localStorage.setItem("carbon-lang", lang); } catch (e) {}
     }
+    function applyTheme(theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      document.documentElement.style.colorScheme = theme;
+      document.querySelectorAll("[data-set-theme]").forEach(function (btn) {
+        btn.classList.toggle("on", btn.getAttribute("data-set-theme") === theme);
+      });
+      try { localStorage.setItem("carbon-theme", theme); } catch (e) {}
+    }
+    function detectTheme() {
+      try {
+        var s = localStorage.getItem("carbon-theme");
+        if (s === "light" || s === "dark") return s;
+      } catch (e) {}
+      return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
     function toast(msg) {
       var el = document.getElementById("toast");
       el.textContent = msg;
@@ -406,6 +470,9 @@ export function renderHomePage(data: HomePageData): string {
     }
     document.querySelectorAll("[data-set-lang]").forEach(function (btn) {
       btn.addEventListener("click", function () { apply(btn.getAttribute("data-set-lang")); });
+    });
+    document.querySelectorAll("[data-set-theme]").forEach(function (btn) {
+      btn.addEventListener("click", function () { applyTheme(btn.getAttribute("data-set-theme")); });
     });
     document.querySelectorAll("[data-copy]").forEach(function (btn) {
       btn.addEventListener("click", async function () {
@@ -421,6 +488,7 @@ export function renderHomePage(data: HomePageData): string {
       });
     });
     apply(detectLang());
+    applyTheme(detectTheme());
   </script>
 </body>
 </html>

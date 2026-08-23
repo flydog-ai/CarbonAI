@@ -122,6 +122,17 @@ describe("HTTP smoke (real listen)", () => {
     expect(await ready.json()).toEqual({ ok: true });
   });
 
+  test("GET /favicon.svg is the brand mark", async () => {
+    const srv = await start();
+    running = srv.handle;
+    const res = await fetch(`${srv.url4}/favicon.svg`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type") ?? "").toContain("image/svg+xml");
+    const svg = await res.text();
+    expect(svg).toContain("<svg");
+    expect(svg).toContain("#6ec9c4");
+  });
+
   test("GET / is homepage with CC Switch import into Claude Code", async () => {
     const srv = await start();
     running = srv.handle;

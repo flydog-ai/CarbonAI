@@ -1,14 +1,35 @@
 import type { ReactNode } from "react";
-import type { Lang } from "./types.ts";
+import type { Lang, Theme } from "./types.ts";
 
 export function LangSwitch({ lang, onChange }: { lang: Lang; onChange: (l: Lang) => void }) {
   return (
-    <div className="lang-switch" role="group">
+    <div className="seg-switch" role="group">
       <button type="button" className={lang === "en" ? "on" : ""} onClick={() => onChange("en")}>
         English
       </button>
       <button type="button" className={lang === "zh" ? "on" : ""} onClick={() => onChange("zh")}>
         中文
+      </button>
+    </div>
+  );
+}
+
+export function ThemeSwitch({
+  theme,
+  onChange,
+  t,
+}: {
+  theme: Theme;
+  onChange: (theme: Theme) => void;
+  t: (k: string) => string;
+}) {
+  return (
+    <div className="seg-switch" role="group" aria-label={t("theme.switch")}>
+      <button type="button" className={theme === "light" ? "on" : ""} onClick={() => onChange("light")}>
+        {t("theme.light")}
+      </button>
+      <button type="button" className={theme === "dark" ? "on" : ""} onClick={() => onChange("dark")}>
+        {t("theme.dark")}
       </button>
     </div>
   );
