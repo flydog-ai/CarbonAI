@@ -71,6 +71,17 @@ describe("users", () => {
     });
     db.users.deleteKey(doomed);
     expect(db.users.getKey(doomed)).toBeNull();
+    const leftover = newApiKeyId();
+    db.users.insertKey({
+      id: leftover,
+      user_id: user.id,
+      label: "old-revoke",
+      key_hash: createHash("sha256").update("sk-old").digest("hex"),
+      key_prefix: "sk-old…old",
+      created_at: Date.now(),
+      revoked_at: Date.now(),
+    });
+    expect(db.users.listKeys(user.id).some((k) => k.id === leftover)).toBe(false);
     db.settings.set("site.name", "Desk");
     expect(db.settings.get("site.name")).toBe("Desk");
     expect(db.settings.getAll()["site.name"]).toBe("Desk");

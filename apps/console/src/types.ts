@@ -16,7 +16,6 @@ export type ApiKey = {
   label: string;
   prefix: string;
   createdAt: number;
-  revoked: boolean;
 };
 
 export type ConnectInfo = {

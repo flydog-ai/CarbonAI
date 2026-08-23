@@ -62,7 +62,7 @@ export class UserRepo {
 
   listKeys(userId: string): ApiKeyRow[] {
     return this.sqlite
-      .query("SELECT * FROM api_keys WHERE user_id = ? ORDER BY created_at DESC")
+      .query("SELECT * FROM api_keys WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC")
       .all(userId) as ApiKeyRow[];
   }
 

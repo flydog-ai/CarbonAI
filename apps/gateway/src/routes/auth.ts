@@ -182,7 +182,6 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): H
       label: k.label,
       prefix: k.key_prefix,
       createdAt: k.created_at,
-      revoked: k.revoked_at != null,
     }));
     return c.json({ keys });
   });
@@ -215,7 +214,6 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): H
     return c.json({ ok: true });
   };
   app.delete("/api/me/keys/:id", removeKey);
-  app.post("/api/me/keys/:id/revoke", removeKey);
 
   return app;
 }

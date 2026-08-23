@@ -263,7 +263,7 @@ export function App() {
           ) : null}
           {view === "desk" ? <Sessions t={t} canDesk={canDesk} statusLabel={statusLabel} /> : null}
           {view === "keys" ? (
-            <Keys t={t} connect={connect} secretFor={secretFor} rememberSecret={rememberSecret} copy={copy} flash={flash} statusLabel={statusLabel} />
+            <Keys t={t} connect={connect} secretFor={secretFor} rememberSecret={rememberSecret} copy={copy} flash={flash} />
           ) : null}
           {view === "users" && isAdmin ? <Users t={t} statusLabel={statusLabel} /> : null}
           {view === "settings" && isAdmin ? <Settings t={t} flash={flash} onSite={setBrand} /> : null}
@@ -455,7 +455,7 @@ function Overview({
   }, [canDesk, isAdmin]);
 
   const live = groupThreads(jobs).filter(isLive);
-  const activeKeys = keys.filter((k) => !k.revoked);
+  const activeKeys = keys;
 
   return (
     <div>
@@ -815,7 +815,6 @@ function Keys({
   rememberSecret,
   copy,
   flash,
-  statusLabel,
 }: {
   t: (k: string, v?: Record<string, string | number>) => string;
   connect: ConnectInfo | null;
@@ -823,7 +822,6 @@ function Keys({
   rememberSecret: (s: string, meta?: { id?: string; prefix?: string }) => void;
   copy: (text: string, ok: string) => void;
   flash: (msg: string) => void;
-  statusLabel: (s: string) => string;
 }) {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [q, setQ] = useState("");
@@ -882,7 +880,6 @@ function Keys({
             <tr>
               <th>{t("keys.colName")}</th>
               <th>{t("keys.colKey")}</th>
-              <th>{t("keys.colStatus")}</th>
               <th>{t("keys.colCreated")}</th>
               <th />
             </tr>
@@ -892,37 +889,32 @@ function Keys({
               <tr key={k.id}>
                 <td>{k.label}</td>
                 <td className="mono">{k.prefix}</td>
-                <td><Pill status={k.revoked ? "error" : "completed"} label={statusLabel(k.revoked ? "disabled" : "active")} /></td>
                 <td>{fmtWhen(k.createdAt, t)}</td>
                 <td className="actions">
-                  {!k.revoked ? (
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={() => {
-                        const s = secretFor(k);
-                        if (s) void importCc(s);
-                        else { setPasteFor(k); setPasteVal(""); setPasteErr(""); setPasteOpen(true); }
-                      }}
-                    >
-                      <IconImport />
-                      {t("keys.importCc")}
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => {
+                      const s = secretFor(k);
+                      if (s) void importCc(s);
+                      else { setPasteFor(k); setPasteVal(""); setPasteErr(""); setPasteOpen(true); }
+                    }}
+                  >
+                    <IconImport />
+                    {t("keys.importCc")}
+                  </button>
                   <button type="button" className="icon-btn" onClick={() => copy(k.prefix, t("keys.prefixCopied"))}>
                     <IconCopy />
                     {t("keys.copy")}
                   </button>
-                  {!k.revoked ? (
-                    <button type="button" className="icon-btn danger" onClick={() => setConfirm(k)}>
-                      <IconTrash />
-                      {t("keys.delete")}
-                    </button>
-                  ) : null}
+                  <button type="button" className="icon-btn danger" onClick={() => setConfirm(k)}>
+                    <IconTrash />
+                    {t("keys.delete")}
+                  </button>
                 </td>
               </tr>
             )) : (
-              <tr><td colSpan={5} className="empty">{t("keys.empty")}</td></tr>
+              <tr><td colSpan={4} className="empty">{t("keys.empty")}</td></tr>
             )}
           </tbody>
         </table>
