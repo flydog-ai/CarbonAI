@@ -21,6 +21,19 @@ Carbon AI 把**人工操作者**包装成模型 API。网关**不调用任何 LL
 - Stack: TypeScript, Bun 1.2+ (Node 22 only if abort/SSE spikes fail). Console is Vite + React + TypeScript; the gateway serves `apps/console/dist` at `/console`. Do not add a second HTTP server (no Next.js). **No Python.**
 - 技术栈：TypeScript、Bun 1.2+（仅当 abort/SSE 尖峰失败才切 Node 22）。控制台是 Vite + React + TypeScript；网关把 `apps/console/dist` 挂在 `/console`。不要再起一个 HTTP 服务（不要 Next.js）。**禁止 Python。**
 
+### Production bar / 生产标准
+
+This is a **production-grade open-source gateway**, not a POC, not a toy, not "good enough until we rewrite it." Design for process death, restart, watch-reload, a real operator on a real desk, and a client that reconnects. Convenience is not a reason to skip the durable path.
+
+这是**生产级开源网关**，不是 POC，不是玩具，也不是「先凑合以后再写」。按进程死亡、重启、watch 重载、真人坐在工作台、客户端会重连来设计。图省事不能当作跳过持久化路径的理由。
+
+- Durable state (accounts, keys, login sessions, job/thread identity, site settings) lives in SQLite (`carbon.db`) or another explicit store. An in-memory `Map` is only for truly ephemeral runtime: an open SSE, a heartbeat timer, a mutex.
+- 需要活过重启的状态（账号、密钥、登录会话、任务/线程身份、站点设置）放在 SQLite（`carbon.db`）或其它明确的存储里。内存 `Map` 只留给真正短暂的运行时：一条还在飞的 SSE、心跳定时器、一把锁。
+- Follow ordinary backend practice: opaque session ids, hashed secrets, explicit expiry, logout that actually deletes, disabled users that cannot keep a cookie. Cookie lifetime and server-side lifetime must match.
+- 按正规后端做：不透明的 session id、哈希密钥、明确过期、退出真的删会话、停用账号后 cookie 不能继续用。Cookie 寿命和服务器寿命必须一致。
+- Prefer the architecture you would defend in a review over the patch that is fastest to type. If a shortcut will surprise an operator after `bun --watch` or a gateway restart, do not ship it.
+- 选能在 review 里讲得通的结构，不要选最好写的补丁。如果一改代码或一重启，操作者会感到被耍，就不要交。
+
 ---
 
 ## Copy / 文案
