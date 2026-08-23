@@ -41,8 +41,8 @@ export class CarbonDb {
           request_hash, request_path, request_json, headers_json, normalized_json,
           response_json, events_json, claimed_by, claimed_at, error_json,
           input_tokens, output_tokens, created_at, started_at, finished_at,
-          thread_id, turn_count, last_user_preview
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          thread_id, turn_count, last_user_preview, deleted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         row.id,
@@ -71,11 +71,20 @@ export class CarbonDb {
         row.thread_id,
         row.turn_count,
         row.last_user_preview,
+        row.deleted_at ?? null,
       );
   }
 
   getJob(id: string): JobRow | null {
     return (this.sqlite.query("SELECT * FROM jobs WHERE id = ?").get(id) as JobRow | null) ?? null;
+  }
+
+  getJobByVendorId(vendorId: string): JobRow | null {
+    return (
+      (this.sqlite
+        .query("SELECT * FROM jobs WHERE vendor_id = ? ORDER BY created_at DESC LIMIT 1")
+        .get(vendorId) as JobRow | null) ?? null
+    );
   }
 
   updateJob(id: string, patch: Partial<JobRow>): void {
@@ -178,6 +187,7 @@ export function openDatabase(dataDir: string): CarbonDb {
   ensureColumn(sqlite, "jobs", "thread_id", "TEXT");
   ensureColumn(sqlite, "jobs", "turn_count", "INTEGER");
   ensureColumn(sqlite, "jobs", "last_user_preview", "TEXT");
+  ensureColumn(sqlite, "jobs", "deleted_at", "INTEGER");
   return new CarbonDb(sqlite, dataDir);
 }
 

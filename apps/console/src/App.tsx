@@ -1012,7 +1012,14 @@ function Keys({
                     <IconImport />
                     {t("keys.importCc")}
                   </button>
-                  <button type="button" className="icon-btn" onClick={() => copy(k.apiKey || k.prefix, t(k.apiKey ? "keys.keyCopied" : "keys.prefixCopied"))}>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => {
+                      if (k.apiKey) copy(k.apiKey, t("keys.keyCopied"));
+                      else flash(t("keys.copyNeedFull"));
+                    }}
+                  >
                     <IconCopy />
                     {t("keys.copy")}
                   </button>

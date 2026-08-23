@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { groupThreads, initials, isLive, threadKey } from "./lib.ts";
+import { groupThreads, initials, isLive, secretPrefix, threadKey } from "./lib.ts";
 import type { Job } from "./types.ts";
 
 function job(over: Partial<Job> & { id: string }): Job {
@@ -33,5 +33,14 @@ describe("thread grouping", () => {
     expect(initials("claude")).toBe("C");
     expect(initials("碳基")).toBe("碳");
     expect(initials("")).toBe("?");
+  });
+});
+
+describe("secretPrefix", () => {
+  test("masks with ASCII dots so a copied prefix is still a ByteString", () => {
+    const p = secretPrefix("sk-carbon-abcdefghijklmnopqrstuv");
+    expect(p.includes("\u2026")).toBe(false);
+    expect(p).toContain("...");
+    expect([...p].every((ch) => (ch.codePointAt(0) ?? 0) < 256)).toBe(true);
   });
 });

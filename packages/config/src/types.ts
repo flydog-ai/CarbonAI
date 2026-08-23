@@ -58,7 +58,7 @@ export type Config = {
   };
   openaiChat: {
     heartbeat: ChatHeartbeat;
-    midstreamError: "error_chunk";
+    midstreamError: "error_chunk" | "silent_close";
   };
   openaiResponses: {
     heartbeat: ResponsesHeartbeat;

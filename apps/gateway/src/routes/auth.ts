@@ -148,7 +148,7 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): H
       siteNameZh: cfg.site.nameZh,
       publicOrigin: cfg.site.publicOrigin,
       ...slots,
-      notes: "Claude Code / CC Switch: base URL has no /v1. OpenAI-style clients append /v1 (adapter next).",
+      notes: "One base URL and one key for every client. Path /v1 is optional. Bearer and x-api-key are the same secret.",
     });
   });
 
@@ -182,7 +182,7 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): H
     const keys = db.users.listKeys(user.id).map((k) => ({
       id: k.id,
       label: k.label,
-      prefix: k.key_prefix,
+      prefix: (k.key_plain ? apiKeyPrefix(k.key_plain) : k.key_prefix).replaceAll("\u2026", "..."),
       apiKey: k.key_plain ?? undefined,
       createdAt: k.created_at,
     }));

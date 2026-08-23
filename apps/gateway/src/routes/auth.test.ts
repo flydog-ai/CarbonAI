@@ -83,8 +83,9 @@ describe("user accounts phase 1", () => {
       const home = await fetch(`${url}/`);
       expect(await home.text()).toContain("Desk");
       const connect = await fetch(`${url}/api/me/connect`, { headers: { cookie } });
-      const info = (await connect.json()) as { endpoint: string; siteName: string; displayName: string };
+      const info = (await connect.json()) as { endpoint: string; openaiEndpoint: string; siteName: string; displayName: string };
       expect(info.endpoint).toBe("https://ai.example");
+      expect(info.openaiEndpoint).toBe("https://ai.example/v1");
       expect(info.siteName).toBe("Desk");
       expect(info.displayName).toBe("Desk Model");
     });

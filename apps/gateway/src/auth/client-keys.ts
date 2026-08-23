@@ -18,13 +18,25 @@ export function secretsEqual(presented: string, stored: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+function unwrapKey(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  let s = value.trim();
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1).trim();
+  }
+  return s || undefined;
+}
+
+/** Any client key header: x-api-key, Bearer, or api-key. Same secret works for every protocol. */
 export function presentedClientKey(headers: Headers): string | undefined {
-  const x = headers.get("x-api-key")?.trim();
-  if (x) return x;
-  const auth = headers.get("authorization");
+  const named = unwrapKey(headers.get("x-api-key")) ?? unwrapKey(headers.get("api-key")) ?? unwrapKey(headers.get("anthropic-api-key"));
+  if (named) return named;
+  const auth = headers.get("authorization")?.trim();
   if (!auth) return undefined;
-  const match = /^Bearer\s+(.+)$/i.exec(auth.trim());
-  return match?.[1]?.trim();
+  const bearer = /^Bearer\s+(.+)$/i.exec(auth);
+  if (bearer?.[1]) return unwrapKey(bearer[1]);
+  if (/^Basic\s+/i.test(auth)) return undefined;
+  return unwrapKey(auth);
 }
 
 export function verifyClientKey(
@@ -71,5 +83,5 @@ export function mintApiKeyPlaintext(): string {
 
 export function apiKeyPrefix(plaintext: string): string {
   if (plaintext.length < 16) return plaintext;
-  return `${plaintext.slice(0, 12)}…${plaintext.slice(-4)}`;
+  return `${plaintext.slice(0, 12)}...${plaintext.slice(-4)}`;
 }

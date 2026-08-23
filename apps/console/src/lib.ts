@@ -43,7 +43,7 @@ export function groupThreads(jobs: Job[]): Job[] {
 
 export function secretPrefix(plaintext: string): string {
   if (plaintext.length < 16) return plaintext;
-  return `${plaintext.slice(0, 12)}…${plaintext.slice(-4)}`;
+  return `${plaintext.slice(0, 12)}...${plaintext.slice(-4)}`;
 }
 
 export async function copyText(text: string): Promise<boolean> {

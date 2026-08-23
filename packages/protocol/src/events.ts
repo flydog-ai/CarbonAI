@@ -207,6 +207,7 @@ export type StreamCtx = {
   writer: SseSink;
   request: NormalizedRequest;
   vendorMessageId: string;
+  createdAt?: number;
 };
 
 export interface ProtocolAdapter {

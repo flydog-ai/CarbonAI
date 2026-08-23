@@ -32,7 +32,7 @@ If those clients were unused anyway, it made sense to package myself as a model.
 
 ## Status
 
-Two protocol families: **Anthropic Messages** (live: `POST /v1/messages`, `GET /v1/models`) and **OpenAI-compatible** Chat Completions / Responses (next, for Codex, DeepSeek-style clients, and similar agents).
+Two protocol families: **Anthropic Messages** (`POST /v1/messages`, `GET /v1/models`) and **OpenAI-compatible** Chat Completions / Responses (`POST /v1/chat/completions`, `POST /v1/responses`, for Codex, DeepSeek-style clients, and similar agents).
 
 Two doors: **`/`** is for agents (homepage Import uses the **local guest key** from `carbon.toml`, no account). **`/console`** is for humans (setup / login / desk / named keys / users). `/ui`, `/account`, `/admin` redirect to `/console`.
 
@@ -42,7 +42,7 @@ Runtime is **TypeScript** (Bun 1.2+; fall back to Node 22 if abort/SSE spikes fa
 
 ## 当前进度
 
-两条协议线：**Anthropic Messages**（已上：`POST /v1/messages`、`GET /v1/models`）和 **OpenAI 兼容** 的 Chat Completions / Responses（接下来做，给 Codex、DeepSeek 类客户端等智能体用）。
+两条协议线：**Anthropic Messages**（`POST /v1/messages`、`GET /v1/models`）和 **OpenAI 兼容** 的 Chat Completions / Responses（`POST /v1/chat/completions`、`POST /v1/responses`，给 Codex、DeepSeek 类客户端等智能体用）。
 
 两扇门：**`/`** 给智能体（首页 Import 用 `carbon.toml` 里的**本地匿名 key**，不用登录）。**`/console`** 给人（首次建超管 / 登录 / 操作台 / 记名 key / 用户）。`/ui`、`/account`、`/admin` 跳到 `/console`。
 
@@ -90,6 +90,10 @@ bun start
 | `GET /v1/models` | Model list (client key required; Anthropic shape if `anthropic-version` is set) | 模型列表（要客户端 key；带 `anthropic-version` 时为 Anthropic 形状） |
 | `POST /v1/messages` | Anthropic Messages, SSE or JSON; hangs until the operator `complete`s | Anthropic Messages，SSE 或 JSON；挂起直到操作者 `complete` |
 | `POST /v1/messages/count_tokens` | Heuristic `input_tokens` | 启发式 input_tokens |
+| `POST /v1/chat/completions` | OpenAI Chat Completions, SSE (`data:` only, `[DONE]`) or JSON | OpenAI Chat Completions，SSE（只有 `data:`，以 `[DONE]` 结束）或 JSON |
+| `POST /v1/responses` | OpenAI Responses (Codex `wire_api=responses`); SSE event name = JSON `type` | OpenAI Responses（Codex `wire_api=responses`）；SSE 的 event 名等于 JSON `type` |
+| `GET` / `DELETE /v1/responses/:id` | Local store fetch / soft-delete | 本地 store 读取 / 软删 |
+| `POST /v1/responses/:id/cancel` | 409 — background responses not supported | 409 — 不支持 background responses |
 | `GET /health` | liveness | liveness |
 | `GET /ready` | readiness | readiness |
 | `HEAD` / `GET /api/hello` | Claude Code warmup, 200 empty body | Claude Code warmup，200 空 body |
@@ -113,9 +117,9 @@ Dev: `bun dev` (gateway watch + Vite rebuild of the console). `bun start` builds
 
 Any agent that can set a custom model base URL can point here.
 
-Anthropic-style (e.g. Claude Code): `ANTHROPIC_BASE_URL=http://127.0.0.1:12580` (**do not** append `/v1`), `ANTHROPIC_AUTH_TOKEN=sk-carbon-local` (local guest key), and a model id such as `claude-sonnet-4-6`. The home-page Import button writes this. Named keys from `/console` identify the caller.
+One base URL: `http://127.0.0.1:12580` (`/v1` is optional). One key: the local guest key `sk-carbon-local`, or a named key from `/console`. Send it as `x-api-key` or `Authorization: Bearer` — same secret.
 
-OpenAI-style (e.g. Codex, DeepSeek-compatible clients): `base_url` **does** include `/v1`. The Responses / Chat Completions adapters are not wired yet.
+The gateway reads the JSON and answers as Anthropic Messages, OpenAI Chat Completions, or OpenAI Responses. Claude Code still uses `ANTHROPIC_BASE_URL` without needing to think about `/v1`. Codex still sets `wire_api = "responses"` in its own config; the HTTP path is auto-detected.
 
 The gateway hangs the SSE until a human replies. Sign in at `/console` with a replier account and send from the desk, or `POST /debug/jobs/:id/complete` with `{"text":"…"}`.
 
@@ -123,9 +127,9 @@ The gateway hangs the SSE until a human replies. Sign in at `/console` with a re
 
 任何能自定义模型地址的智能体都可以指过来。
 
-Anthropic 风格（如 Claude Code）：`ANTHROPIC_BASE_URL=http://127.0.0.1:12580`（**不要**加 `/v1`），`ANTHROPIC_AUTH_TOKEN=sk-carbon-local`（本地匿名 key），模型 id 如 `claude-sonnet-4-6`。首页 Import 会写入这些。`/console` 签发的记名 key 用来区分调用方。
+一个地址：`http://127.0.0.1:12580`（`/v1` 可有可无）。一把密钥：本地匿名 `sk-carbon-local`，或 `/console` 签发的记名 key。`x-api-key` 或 `Authorization: Bearer` 用同一把。
 
-OpenAI 风格（如 Codex、DeepSeek 兼容客户端）：`base_url` **要**带 `/v1`。Responses / Chat Completions 适配器还没接。
+网关看 JSON 自动按 Anthropic Messages、OpenAI Chat Completions 或 Responses 回答。Claude Code 仍填 `ANTHROPIC_BASE_URL`，不必纠结 `/v1`。Codex 自己的配置里仍要 `wire_api = "responses"`；HTTP 路径由网关识别。
 
 网关会挂起 SSE 等人回复。到 `/console` 用有回复权的账号登录，在操作台发送，或 `POST /debug/jobs/:id/complete` `{"text":"…"}`。
 

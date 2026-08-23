@@ -22,6 +22,7 @@ export type ApiKey = {
 
 export type ConnectInfo = {
   endpoint: string;
+  openaiEndpoint?: string;
   model?: string;
   displayName?: string;
   siteName?: string;

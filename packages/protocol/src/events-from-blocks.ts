@@ -1,5 +1,20 @@
-import type { AssistantBlock, InternalEvent, StopReason } from "./events.ts";
+import type { AssistantBlock, InternalEvent, NormalizedRequest, StopReason } from "./events.ts";
+import { opaqueEncryptedContent } from "./encrypted.ts";
+import { ids } from "./ids.ts";
 import { estimateTextTokens } from "./tokens.ts";
+
+function shouldEmitEmptyReasoning(
+  req: NormalizedRequest | undefined,
+  mode: "auto" | "always" | "never" | undefined,
+): boolean {
+  if (!req) return false;
+  if (mode === "never") return false;
+  if (mode === "always") return true;
+  const include = req.include ?? [];
+  const hasInclude = include.includes("reasoning.encrypted_content");
+  const hasKey = req.reasoning != null || req.extras.hasReasoningKey === true;
+  return hasKey || hasInclude;
+}
 
 export function eventsFromBlocks(opts: {
   jobId: string;
@@ -10,6 +25,8 @@ export function eventsFromBlocks(opts: {
   blocks: AssistantBlock[];
   stopReason?: StopReason;
   stopSequence?: string | null;
+  request?: NormalizedRequest;
+  emitEmptyReasoning?: "auto" | "always" | "never";
 }): InternalEvent[] {
   const events: InternalEvent[] = [
     {
@@ -24,8 +41,21 @@ export function eventsFromBlocks(opts: {
 
   let outputTokens = 0;
   let hasTool = false;
+  const blocks = [...opts.blocks];
+  if (
+    shouldEmitEmptyReasoning(opts.request, opts.emitEmptyReasoning) &&
+    !blocks.some((b) => b.type === "reasoning")
+  ) {
+    const includeEnc = opts.request?.include?.includes("reasoning.encrypted_content") === true;
+    blocks.unshift({
+      type: "reasoning",
+      id: ids.rs(),
+      summary: [],
+      encryptedContent: includeEnc ? opaqueEncryptedContent(opts.vendorMessageId) : undefined,
+    });
+  }
 
-  opts.blocks.forEach((block, blockIndex) => {
+  blocks.forEach((block, blockIndex) => {
     switch (block.type) {
       case "text":
         outputTokens += estimateTextTokens(block.text);

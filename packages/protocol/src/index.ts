@@ -34,6 +34,23 @@ export {
 export { continuationPrefixLength, conversationTurns, isConversationContinuation } from "./thread.ts";
 export { isMetaTag, parseEnvPairs, splitMarkup, type MarkupSegment } from "./markup.ts";
 export { AnthropicAdapter } from "./adapters/anthropic.ts";
+export { OpenAIChatAdapter } from "./adapters/openai-chat.ts";
+export {
+  OpenAIResponsesAdapter,
+  buildYouResponse,
+  outputItemsFromBlocks,
+  type YouResponse,
+} from "./adapters/openai-responses.ts";
 export { normalizeAnthropicRequest } from "./normalize/anthropic.ts";
+export { normalizeOpenAIChatRequest } from "./normalize/openai-chat.ts";
+export { normalizeOpenAIResponsesRequest } from "./normalize/openai-responses.ts";
 export { anthropicError, AnthropicRequestError } from "./errors/anthropic.ts";
+export { openaiError, OpenAIRequestError } from "./errors/openai.ts";
+export {
+  functionCallArguments,
+  wrapFunctionApplyPatchArgs,
+  pickRequiredStringKey,
+} from "./apply-patch.ts";
+export { opaqueEncryptedContent } from "./encrypted.ts";
+export { detectProtocol } from "./detect.ts";
 export { claudeModelSlots, displayNameFor, listModels, stripContextSuffix } from "./models.ts";

@@ -180,6 +180,9 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
   if (file.openai_chat?.heartbeat === "comment" || file.openai_chat?.heartbeat === "empty_delta") {
     cfg.openaiChat.heartbeat = file.openai_chat.heartbeat;
   }
+  if (file.openai_chat?.midstream_error === "error_chunk" || file.openai_chat?.midstream_error === "silent_close") {
+    cfg.openaiChat.midstreamError = file.openai_chat.midstream_error;
+  }
   if (
     file.openai_responses?.heartbeat === "keepalive" ||
     file.openai_responses?.heartbeat === "comment" ||

@@ -6,16 +6,18 @@ import type { JobEngine } from "./job/engine.ts";
 import { UserSessions } from "./auth/user-session.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { adminRoutes } from "./routes/admin.ts";
-import { anthropicError } from "@carbon-ai/protocol";
+import { anthropicError, openaiError } from "@carbon-ai/protocol";
 import { healthRoutes } from "./routes/health.ts";
 import { helloRoutes } from "./routes/hello.ts";
 import { homeRoutes } from "./routes/home.ts";
 import { modelsRoutes } from "./routes/models.ts";
-import { anthropicRoutes } from "./routes/anthropic.ts";
+import { vendorRoutes } from "./routes/vendor.ts";
+import { openaiResponsesRoutes } from "./routes/openai-responses.ts";
 import { debugRoutes } from "./routes/debug.ts";
 import { debugJobRoutes } from "./routes/debug-jobs.ts";
 import { consoleRoutes } from "./routes/console.ts";
 import { operatorRoutes } from "./routes/operator.ts";
+import { accessLog } from "./http/access-log.ts";
 
 export type AppDeps = {
   sessions?: HangRegistry;
@@ -31,6 +33,7 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Hono {
   const app = new Hono();
   const sessions = deps.sessions ?? new HangRegistry();
 
+  app.use("*", accessLog());
   app.route("/", consoleRoutes());
   app.route("/", homeRoutes(cfg, deps.db));
   app.route("/", healthRoutes());
@@ -42,10 +45,12 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Hono {
     app.route("/", authRoutes(cfg, deps.db, userSessions));
     app.route("/", adminRoutes(cfg, deps.db, userSessions));
     app.route("/", operatorRoutes(cfg, deps.engine, deps.db, userSessions));
-    app.route("/", anthropicRoutes(cfg, deps.engine, deps.db));
+    app.route("/", vendorRoutes(cfg, deps.engine, deps.db));
+    app.route("/", openaiResponsesRoutes(cfg, deps.engine, deps.db));
     app.route("/", debugJobRoutes(cfg, deps.engine));
   } else if (deps.engine) {
-    app.route("/", anthropicRoutes(cfg, deps.engine));
+    app.route("/", vendorRoutes(cfg, deps.engine));
+    app.route("/", openaiResponsesRoutes(cfg, deps.engine));
     app.route("/", debugJobRoutes(cfg, deps.engine));
   }
 
@@ -53,7 +58,7 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Hono {
     if (c.req.header("anthropic-version")) {
       return c.json(anthropicError("not_found_error", `Not Found: ${c.req.path}`), 404);
     }
-    return c.json({ error: "not found" }, 404);
+    return c.json(openaiError(`Unknown request URL: ${c.req.path}`), 404);
   });
 
   return app;

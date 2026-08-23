@@ -62,7 +62,16 @@ export type JobSummary = {
   turnCount?: number;
 };
 
-type TerminalState = { status: "completed" | "cancelled" | "failed"; error?: string };
+type TerminalState = { status: "completed" | "cancelled" | "failed"; error?: string; code?: string };
+
+export type VendorLookup = {
+  id: string;
+  protocol: Protocol;
+  status: JobStatus;
+  deleted: boolean;
+  createdAt: number;
+  vendorId: string;
+};
 
 type Runtime = {
   id: string;
@@ -86,6 +95,7 @@ type Runtime = {
   userId?: string;
   threadId: string;
   turnCount: number;
+  deletedAt?: number;
   adapter: ProtocolAdapter;
   writer?: SseSink;
   cancelReason?: CancelReason;
@@ -247,6 +257,7 @@ export class JobEngine {
         thread_id: threadId,
         turn_count: turnCount,
         last_user_preview: preview || null,
+        deleted_at: null,
       });
       this.jobs.set(id, rt);
       return this.summary(rt);
@@ -301,6 +312,8 @@ export class JobEngine {
         inputTokens: latest.inputTokens,
         blocks,
         stopReason: opts.stopReason,
+        request: latest.request,
+        emitEmptyReasoning: this.cfg.jobs.emitEmptyReasoning,
       });
       latest.events = events;
       const output = fold(events);
@@ -418,8 +431,80 @@ export class JobEngine {
   }
 
   json(jobId: string): unknown {
-    const rt = this.require(jobId);
-    return rt.adapter.toJson(fold(rt.events), rt.request);
+    const rt = this.jobs.get(jobId);
+    if (rt && (rt.events.length > 0 || rt.status === "completed" || rt.status === "failed")) {
+      return rt.adapter.toJson(fold(rt.events), rt.request);
+    }
+    const row = this.db.getJob(jobId);
+    if (row?.response_json) {
+      try {
+        return JSON.parse(row.response_json) as unknown;
+      } catch {
+        /* fall through */
+      }
+    }
+    if (rt) return rt.adapter.toJson(fold(rt.events), rt.request);
+    throw new JobNotFoundError(jobId);
+  }
+
+  lookupVendor(vendorId: string): VendorLookup | undefined {
+    for (const rt of this.jobs.values()) {
+      if (rt.vendorMessageId === vendorId) {
+        return {
+          id: rt.id,
+          protocol: rt.protocol,
+          status: rt.status,
+          deleted: rt.deletedAt != null,
+          createdAt: rt.createdAt,
+          vendorId: rt.vendorMessageId,
+        };
+      }
+    }
+    const row = this.db.getJobByVendorId(vendorId);
+    if (!row) return undefined;
+    return {
+      id: row.id,
+      protocol: row.protocol as Protocol,
+      status: row.status as JobStatus,
+      deleted: row.deleted_at != null,
+      createdAt: row.created_at,
+      vendorId: row.vendor_id,
+    };
+  }
+
+  softDelete(jobId: string): void {
+    const now = this.now();
+    const rt = this.jobs.get(jobId);
+    if (rt) rt.deletedAt = now;
+    this.db.updateJob(jobId, { deleted_at: now });
+  }
+
+  async fail(jobId: string, err: { code: string; message: string }): Promise<void> {
+    return this.lock(async () => {
+      const rt = this.jobs.get(jobId);
+      if (!rt || !LIVE.includes(rt.status)) return;
+      if (rt.writer) {
+        try {
+          const ctx = this.ctx(rt);
+          await rt.adapter.apply(ctx, { type: "error", code: err.code, message: err.message });
+          await rt.adapter.closeStream(ctx);
+        } catch {
+          try {
+            await rt.writer.drain();
+          } catch {
+            // socket already dead
+          }
+        }
+      }
+      try {
+        this.db.updateJob(rt.id, {
+          response_json: JSON.stringify(rt.adapter.toJson(fold(rt.events), rt.request)),
+        });
+      } catch {
+        /* adapter may not be ready */
+      }
+      this.finish(rt, { status: "failed", error: err.message, code: err.code });
+    });
   }
 
   list(): JobSummary[] {
@@ -559,12 +644,16 @@ export class JobEngine {
   private sweepClaims(): void {
     const ttl = this.cfg.jobs.claimTtlMs;
     const now = this.now();
+    const waitMs = this.cfg.jobs.waitTimeoutSec * 1000;
     for (const rt of this.jobs.values()) {
       if (rt.status === "claimed" && rt.claimedAt && now - rt.claimedAt > ttl) {
         rt.status = "pending";
         rt.claimedBy = undefined;
         rt.claimedAt = undefined;
         this.persistStatus(rt);
+      }
+      if (LIVE.includes(rt.status) && waitMs > 0 && now - rt.createdAt >= waitMs) {
+        void this.fail(rt.id, { code: "timeout", message: "Carbon AI operator wait timeout" });
       }
     }
   }
@@ -576,6 +665,7 @@ export class JobEngine {
       writer: rt.writer,
       request: rt.request,
       vendorMessageId: rt.vendorMessageId,
+      createdAt: rt.createdAt,
     };
   }
 

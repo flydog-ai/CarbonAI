@@ -41,6 +41,7 @@ function baseJob(over: Partial<JobRow> = {}): JobRow {
     thread_id: null,
     turn_count: null,
     last_user_preview: null,
+    deleted_at: null,
     ...over,
   };
 }

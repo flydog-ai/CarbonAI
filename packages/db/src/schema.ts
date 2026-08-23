@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   finished_at   INTEGER,
   thread_id     TEXT,
   turn_count    INTEGER,
-  last_user_preview TEXT
+  last_user_preview TEXT,
+  deleted_at    INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS blobs (
@@ -112,6 +113,7 @@ export type JobRow = {
   thread_id: string | null;
   turn_count: number | null;
   last_user_preview: string | null;
+  deleted_at: number | null;
 };
 
 export type BlobRow = {

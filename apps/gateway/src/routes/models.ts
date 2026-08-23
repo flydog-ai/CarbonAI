@@ -1,7 +1,7 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { Config } from "@carbon-ai/config";
 import type { CarbonDb } from "@carbon-ai/db";
-import { anthropicError, listModels } from "@carbon-ai/protocol";
+import { anthropicError, listModels, openaiError } from "@carbon-ai/protocol";
 import { presentedClientKey, verifyClientKey } from "../auth/client-keys.ts";
 
 function isAnthropic(c: { req: { header: (n: string) => string | undefined } }): boolean {
@@ -18,15 +18,19 @@ export function modelsRoutes(cfg: Config, db?: CarbonDb): Hono {
       aliases: cfg.models.aliases,
     });
 
-  const requireClient = (c: { req: { raw: Request } }) => {
+  const requireClient = (c: {
+    req: { raw: Request; header: (n: string) => string | undefined };
+  }) => {
     const id = verifyClientKey(cfg, presentedClientKey(c.req.raw.headers), db);
     if (!id) {
-      return anthropicError("authentication_error", "invalid x-api-key");
+      return isAnthropic(c)
+        ? anthropicError("authentication_error", "invalid x-api-key")
+        : openaiError("Invalid API key", { type: "invalid_request_error", code: "invalid_api_key" });
     }
     return id;
   };
 
-  app.get("/v1/models", (c) => {
+  const list = (c: Context) => {
     const client = requireClient(c);
     if ("error" in client) return c.json(client, 401);
     const models = catalog();
@@ -53,9 +57,9 @@ export function modelsRoutes(cfg: Config, db?: CarbonDb): Hono {
         owned_by: "carbon-ai",
       })),
     });
-  });
+  };
 
-  app.get("/v1/models/:id", (c) => {
+  const one = (c: Context) => {
     const client = requireClient(c);
     if ("error" in client) return c.json(client, 401);
     const id = c.req.param("id");
@@ -70,7 +74,14 @@ export function modelsRoutes(cfg: Config, db?: CarbonDb): Hono {
       });
     }
     return c.json({ id, object: "model", created: 0, owned_by: "carbon-ai" });
-  });
+  };
+
+  app.get("/v1/models", list);
+  app.get("/models", list);
+  app.get("/v1/v1/models", list);
+  app.get("/v1/models/:id", one);
+  app.get("/models/:id", one);
+  app.get("/v1/v1/models/:id", one);
 
   return app;
 }

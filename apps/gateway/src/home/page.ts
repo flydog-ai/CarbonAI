@@ -313,13 +313,13 @@ export function renderHomePage(data: HomePageData): string {
                 ? `<p class="hint" data-i18n="hint.guest">This import uses the local guest key from carbon.toml. No account. Anyone with the key can open jobs on this gateway.</p>`
                 : `<p class="hint" data-i18n="hint.nokey">No local guest key in carbon.toml. Sign in at /console and mint a user key.</p>`
             }
-            <p class="hint" data-i18n="hint.cc">If Import does nothing, CC Switch is not installed — copy Base / Key / Model by hand. Base URL has no /v1.</p>
+            <p class="hint" data-i18n="hint.cc">If Import does nothing, copy Base / Key / Model by hand. One URL and one key; /v1 is optional.</p>
           </div>
         </aside>
       </section>
       <div class="pills">
         <span class="pill"><i></i><span data-i18n="pill.hang">Hangs until a person replies</span></span>
-        <span class="pill"><i></i><span data-i18n="pill.nov1">Claude Code: no /v1 on the base URL</span></span>
+        <span class="pill"><i></i><span data-i18n="pill.nov1">One URL, one key, any client</span></span>
         <span class="pill"><i></i><span data-i18n="pill.keys">Named keys identify the caller</span></span>
       </div>
       <section class="features">
@@ -330,8 +330,8 @@ export function renderHomePage(data: HomePageData): string {
         </article>
         <article class="feat">
           <div class="icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg></div>
-          <h3 data-i18n="f2.title">Anthropic now, OpenAI next</h3>
-          <p data-i18n="f2.body">Anthropic Messages is live. OpenAI-compatible Chat Completions / Responses come next for Codex and similar agents.</p>
+          <h3 data-i18n="f2.title">Anthropic and OpenAI, live</h3>
+          <p data-i18n="f2.body">Anthropic Messages plus OpenAI Chat Completions and Responses. Codex and similar agents can point here.</p>
         </article>
         <article class="feat">
           <div class="icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg></div>
@@ -345,8 +345,8 @@ export function renderHomePage(data: HomePageData): string {
         <div class="chips">
           <span class="chip">Claude Code <span class="badge" data-i18n="live">live</span></span>
           <span class="chip">CC Switch <span class="badge" data-i18n="live">live</span></span>
-          <span class="chip">Codex <span class="badge soon" data-i18n="soon">next</span></span>
-          <span class="chip"><span data-i18n="clients.openai">OpenAI-style</span> <span class="badge soon" data-i18n="soon">next</span></span>
+          <span class="chip">Codex <span class="badge" data-i18n="live">live</span></span>
+          <span class="chip"><span data-i18n="clients.openai">OpenAI-style</span> <span class="badge" data-i18n="live">live</span></span>
         </div>
       </section>
     </main>
@@ -372,14 +372,14 @@ export function renderHomePage(data: HomePageData): string {
         "loop.ok": "operator replies → stream completes",
         "hint.guest": "This import uses the local guest key from carbon.toml. No account. Anyone with the key can open jobs on this gateway.",
         "hint.nokey": "No local guest key in carbon.toml. Sign in at /console and mint a user key.",
-        "hint.cc": "If Import does nothing, CC Switch is not installed — copy Base / Key / Model by hand. Base URL has no /v1.",
+        "hint.cc": "If Import does nothing, copy Base / Key / Model by hand. One URL and one key; /v1 is optional.",
         "pill.hang": "Hangs until a person replies",
-        "pill.nov1": "Claude Code: no /v1 on the base URL",
+        "pill.nov1": "One URL, one key, any client",
         "pill.keys": "Named keys identify the caller",
         "f1.title": "A person, packaged as a model",
         "f1.body": "The gateway does not call any LLM. You read the full context on this machine and reply. Clients treat it like any other API.",
-        "f2.title": "Anthropic now, OpenAI next",
-        "f2.body": "Anthropic Messages is live. OpenAI-compatible Chat Completions / Responses come next for Codex and similar agents.",
+        "f2.title": "One URL, any protocol",
+        "f2.body": "The gateway reads the request and answers as Anthropic Messages, Chat Completions, or Responses. Same key either way.",
         "f3.title": "Console for humans",
         "f3.body": "Sign in to reply on Sessions, mint named keys, and (if you are superadmin) manage users and site settings.",
         "clients.title": "Talks to the clients you already use",
@@ -406,14 +406,14 @@ export function renderHomePage(data: HomePageData): string {
         "loop.ok": "操作者回复 → 流结束",
         "hint.guest": "这一键导入用的是 carbon.toml 里的本地匿名密钥，不用登录。拿到这把 key 就能往本机网关丢任务。",
         "hint.nokey": "toml 里没有本地匿名密钥。到 /console 登录并签发用户密钥。",
-        "hint.cc": "点了没反应：多半没装 CC Switch，请手动抄地址、密钥、模型。接口地址不含 /v1。",
+        "hint.cc": "点了没反应：请手动抄地址、密钥、模型。一个地址一把密钥，/v1 可有可无。",
         "pill.hang": "一直挂到有人回复",
-        "pill.nov1": "Claude Code：地址不要加 /v1",
+        "pill.nov1": "一个地址，一把密钥，任意客户端",
         "pill.keys": "记名密钥用来识别调用方",
         "f1.title": "把人包装成模型",
         "f1.body": "网关不调用任何 LLM。你在本机看完整上下文并亲手回复。客户端把它当成普通 API。",
-        "f2.title": "先 Anthropic，再 OpenAI",
-        "f2.body": "Anthropic Messages 已上。接下来做 OpenAI 兼容的 Chat Completions / Responses，给 Codex 等智能体用。",
+        "f2.title": "一个地址，任意协议",
+        "f2.body": "网关看请求体自动走 Anthropic Messages、Chat Completions 或 Responses。同一把密钥。",
         "f3.title": "给人用的控制台",
         "f3.body": "登录后在会话里回复、签发记名密钥。超级管理员还可以管用户和站点设置。",
         "clients.title": "接你已经在用的客户端",
