@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { SCHEMA_SQL, type BlobRow, type JobRow } from "./schema.ts";
+import { SessionRepo } from "./sessions.ts";
 import { SettingsRepo } from "./settings.ts";
 import { UserRepo } from "./users.ts";
 
@@ -13,6 +14,7 @@ export class CarbonDb {
   readonly blobDir: string;
   readonly users: UserRepo;
   readonly settings: SettingsRepo;
+  readonly sessions: SessionRepo;
 
   constructor(
     readonly sqlite: Database,
@@ -23,6 +25,7 @@ export class CarbonDb {
     this.blobDir = join(dataDir, "blobs");
     this.users = new UserRepo(sqlite);
     this.settings = new SettingsRepo(sqlite);
+    this.sessions = new SessionRepo(sqlite);
     mkdirSync(this.blobDir, { recursive: true, mode: 0o700 });
   }
 

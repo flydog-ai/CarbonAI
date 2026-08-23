@@ -73,6 +73,16 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires_at);
 `;
 
 export type JobRow = {
@@ -132,4 +142,11 @@ export type ApiKeyRow = {
   key_plain: string | null;
   created_at: number;
   revoked_at: number | null;
+};
+
+export type SessionRow = {
+  id: string;
+  user_id: string;
+  created_at: number;
+  expires_at: number;
 };

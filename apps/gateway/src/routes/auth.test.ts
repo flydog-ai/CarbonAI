@@ -194,11 +194,65 @@ describe("user accounts phase 1", () => {
       });
       expect(disable.status).toBe(200);
 
+      const kicked = await fetch(`${url}/api/me`, { headers: { cookie: bobCookie } });
+      expect(kicked.status).toBe(401);
+
       const models = await fetch(`${url}/v1/models`, {
         headers: { "x-api-key": bob.apiKey, "anthropic-version": "2023-06-01" },
       });
       expect(models.status).toBe(401);
     });
+  });
+
+  test("login cookie still works after a new process on the same db", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "carbon-sess-"));
+    const conf: Config = structuredClone(DEFAULT_CONFIG);
+    conf.auth.operatorToken = "op-token";
+    conf.auth.bootstrapUsername = "admin";
+    conf.auth.bootstrapPassword = "adminpass";
+    const db1 = openDatabase(dir);
+    await ensureBootstrapAdmin(conf, db1);
+    const engine1 = new JobEngine(conf, db1);
+    const app1 = createApp(conf, { engine: engine1, db: db1 });
+    const handle1 = listen(app1.fetch, { host: "127.0.0.1", port: pickPort(), idleTimeout: 0 });
+    let cookie = "";
+    try {
+      const login = await fetch(`http://127.0.0.1:${handle1.port}/api/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "adminpass" }),
+      });
+      expect(login.status).toBe(200);
+      cookie = cookieFrom(login);
+      expect(cookie.startsWith("carbon_user=")).toBe(true);
+      const me = await fetch(`http://127.0.0.1:${handle1.port}/api/me`, { headers: { cookie } });
+      expect(me.status).toBe(200);
+    } finally {
+      handle1.stop();
+      engine1.stop();
+      db1.close();
+    }
+    const db2 = openDatabase(dir);
+    const engine2 = new JobEngine(conf, db2);
+    const app2 = createApp(conf, { engine: engine2, db: db2 });
+    const handle2 = listen(app2.fetch, { host: "127.0.0.1", port: pickPort(), idleTimeout: 0 });
+    try {
+      const me = await fetch(`http://127.0.0.1:${handle2.port}/api/me`, { headers: { cookie } });
+      expect(me.status).toBe(200);
+      const body = (await me.json()) as { user: { username: string } };
+      expect(body.user.username).toBe("admin");
+      const out = await fetch(`http://127.0.0.1:${handle2.port}/api/auth/logout`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(out.status).toBe(200);
+      const after = await fetch(`http://127.0.0.1:${handle2.port}/api/me`, { headers: { cookie } });
+      expect(after.status).toBe(401);
+    } finally {
+      handle2.stop();
+      engine2.stop();
+      db2.close();
+    }
   });
 
   test("reset-bootstrap file updates the superadmin password once", async () => {

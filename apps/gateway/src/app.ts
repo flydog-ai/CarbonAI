@@ -38,7 +38,7 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Hono {
   app.route("/", modelsRoutes(cfg, deps.db));
   app.route("/", debugRoutes(sessions));
   if (deps.engine && deps.db) {
-    const userSessions = new UserSessions();
+    const userSessions = new UserSessions(deps.db.sessions);
     app.route("/", authRoutes(cfg, deps.db, userSessions));
     app.route("/", adminRoutes(cfg, deps.db, userSessions));
     app.route("/", operatorRoutes(cfg, deps.engine, deps.db, userSessions));

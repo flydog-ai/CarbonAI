@@ -129,4 +129,29 @@ describe("CarbonDb", () => {
     expect(r.blobsDeleted).toBe(1);
     db.close();
   });
+
+  test("login sessions persist, expire, and delete", async () => {
+    const db = openDatabase(tmp());
+    const user = await newUser({ username: "ada", password: "password1" });
+    db.users.insert(user);
+    db.sessions.insert({
+      id: "sess_live",
+      user_id: user.id,
+      created_at: Date.now(),
+      expires_at: Date.now() + 60_000,
+    });
+    db.sessions.insert({
+      id: "sess_old",
+      user_id: user.id,
+      created_at: Date.now() - 120_000,
+      expires_at: Date.now() - 60_000,
+    });
+    expect(db.sessions.get("sess_live")?.user_id).toBe(user.id);
+    expect(db.sessions.deleteExpired()).toBe(1);
+    expect(db.sessions.get("sess_old")).toBeNull();
+    expect(db.sessions.get("sess_live")).not.toBeNull();
+    expect(db.sessions.deleteByUser(user.id)).toBe(1);
+    expect(db.sessions.get("sess_live")).toBeNull();
+    db.close();
+  });
 });

@@ -93,6 +93,7 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): 
     if (user.role === "superadmin") return c.json({ error: "cannot edit superadmin" }, 409);
     const body = (await readJsonCapped(c.req.raw, 4096)) as { canReply?: boolean; disabled?: boolean };
     db.users.updateFlags(id, { can_reply: body.canReply, disabled: body.disabled });
+    if (body.disabled === true) db.sessions.deleteByUser(id);
     const next = db.users.getById(id)!;
     return c.json({
       id: next.id,

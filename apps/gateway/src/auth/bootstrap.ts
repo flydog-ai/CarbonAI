@@ -47,6 +47,7 @@ export async function resetBootstrapIfRequested(cfg: Config, db: CarbonDb): Prom
     return false;
   }
   db.users.setPasswordHash(user.id, await Bun.password.hash(password));
+  db.sessions.deleteByUser(user.id);
   console.log(`superadmin password reset for ${user.username} (from data_dir/reset-bootstrap)`);
   return true;
 }

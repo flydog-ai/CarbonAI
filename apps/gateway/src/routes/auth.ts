@@ -5,7 +5,7 @@ import { newApiKeyId, newUser, type CarbonDb } from "@carbon-ai/db";
 import { claudeModelSlots } from "@carbon-ai/protocol";
 import { resetBootstrapIfRequested } from "../auth/bootstrap.ts";
 import { apiKeyPrefix, hashApiKey, mintApiKeyPlaintext, verifyClientKey } from "../auth/client-keys.ts";
-import { USER_COOKIE, UserSessions } from "../auth/user-session.ts";
+import { USER_COOKIE, USER_SESSION_TTL_SEC, UserSessions } from "../auth/user-session.ts";
 import { buildCcSwitchClaudeImportHref, siteOrigin } from "../home/cc-switch.ts";
 import { readJsonCapped } from "../http/read-json-capped.ts";
 
@@ -26,7 +26,7 @@ function setUserCookie(c: Context, sessionId: string): void {
     httpOnly: true,
     path: "/",
     sameSite: "Lax",
-    maxAge: 14 * 24 * 60 * 60,
+    maxAge: USER_SESSION_TTL_SEC,
   });
 }
 
