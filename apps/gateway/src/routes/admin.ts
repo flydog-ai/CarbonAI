@@ -78,6 +78,7 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, c
     return c.json({
       ...channels.callbackInfo(c.req.url),
       wechat: channels.publicWechat(),
+      wechatBot: channels.publicWechatBot(),
     });
   });
 
@@ -105,7 +106,35 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, c
     return c.json({
       ...channels.callbackInfo(c.req.url),
       wechat,
+      wechatBot: channels.publicWechatBot(),
     });
+  });
+
+  app.post("/api/admin/channels/wechat-bot/qr", async (c) => {
+    const user = superadmin(c);
+    if (!user) return c.json({ error: "forbidden" }, 403);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    try {
+      return c.json(await channels.startBotQr(user.id));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "qr failed" }, 502);
+    }
+  });
+
+  app.get("/api/admin/channels/wechat-bot/qr", async (c) => {
+    if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    const sessionKey = c.req.query("sessionKey") ?? "";
+    const verifyCode = c.req.query("verifyCode") ?? undefined;
+    if (!sessionKey) return c.json({ error: "sessionKey required" }, 400);
+    return c.json(await channels.pollBotQr(sessionKey, verifyCode));
+  });
+
+  app.post("/api/admin/channels/wechat-bot/logout", (c) => {
+    if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    channels.logoutBot();
+    return c.json({ wechatBot: channels.publicWechatBot() });
   });
 
   app.get("/api/admin/users", (c) => {

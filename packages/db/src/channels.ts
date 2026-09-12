@@ -35,16 +35,27 @@ export class ChannelRepo {
       this.sqlite
         .query(
           `UPDATE channel_accounts
-           SET label = ?, app_id = ?, app_secret = ?, token = ?, aes_key = ?, enabled = ?
+           SET label = ?, app_id = ?, app_secret = ?, token = ?, aes_key = ?, enabled = ?,
+               base_url = ?, sync_buf = ?
            WHERE id = ?`,
         )
-        .run(row.label, row.app_id, row.app_secret, row.token, row.aes_key, row.enabled, existing.id);
+        .run(
+          row.label,
+          row.app_id,
+          row.app_secret,
+          row.token,
+          row.aes_key,
+          row.enabled,
+          row.base_url ?? existing.base_url,
+          row.sync_buf ?? existing.sync_buf,
+          existing.id,
+        );
       return;
     }
     this.sqlite
       .query(
-        `INSERT INTO channel_accounts (id, kind, label, app_id, app_secret, token, aes_key, enabled, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO channel_accounts (id, kind, label, app_id, app_secret, token, aes_key, enabled, created_at, base_url, sync_buf)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         row.id,
@@ -56,7 +67,13 @@ export class ChannelRepo {
         row.aes_key,
         row.enabled,
         row.created_at,
+        row.base_url ?? null,
+        row.sync_buf ?? null,
       );
+  }
+
+  setSyncBuf(id: string, buf: string): void {
+    this.sqlite.query("UPDATE channel_accounts SET sync_buf = ? WHERE id = ?").run(buf, id);
   }
 
   listBindings(accountId: string): ChannelBindingRow[] {

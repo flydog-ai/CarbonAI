@@ -117,7 +117,9 @@ CREATE TABLE IF NOT EXISTS channel_accounts (
   token       TEXT NOT NULL DEFAULT '',
   aes_key     TEXT,
   enabled     INTEGER NOT NULL DEFAULT 0,
-  created_at  INTEGER NOT NULL
+  created_at  INTEGER NOT NULL,
+  base_url    TEXT,
+  sync_buf    TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS channel_accounts_kind ON channel_accounts(kind);
@@ -216,6 +218,8 @@ export type ChannelAccountRow = {
   aes_key: string | null;
   enabled: number;
   created_at: number;
+  base_url: string | null;
+  sync_buf: string | null;
 };
 
 export type ChannelBindingRow = {

@@ -46,6 +46,7 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Hono {
   if (deps.engine && deps.db) {
     const userSessions = new UserSessions(deps.db.sessions);
     const channels = deps.channels ?? new ChannelHub(cfg, deps.db, deps.engine);
+    channels.start();
     deps.engine.onLive = (job) => {
       void channels.notify(job);
     };

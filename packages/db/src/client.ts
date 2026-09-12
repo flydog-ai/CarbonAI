@@ -204,6 +204,8 @@ export function openDatabase(dataDir: string): CarbonDb {
   ensureColumn(sqlite, "jobs", "client_ip", "TEXT");
   ensureColumn(sqlite, "jobs", "caller_label", "TEXT");
   ensureColumn(sqlite, "users", "last_seen_at", "INTEGER");
+  ensureColumn(sqlite, "channel_accounts", "base_url", "TEXT");
+  ensureColumn(sqlite, "channel_accounts", "sync_buf", "TEXT");
   return new CarbonDb(sqlite, dataDir);
 }
 

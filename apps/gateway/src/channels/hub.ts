@@ -12,8 +12,18 @@ import {
   xmlField,
   maskPeer,
 } from "./wechat-mp.ts";
+import {
+  fetchBotQr,
+  getUpdates,
+  ILINK_QR_BASE,
+  pollQrStatus,
+  sendBotText,
+  textFromIlink,
+  type IlinkFetch,
+} from "./weixin-ilink.ts";
 
 const KIND = "wechat_mp";
+const KIND_BOT = "wechat_bot";
 const LIVE = new Set(["pending", "claimed", "streaming"]);
 const BIND_TTL_MS = 10 * 60 * 1000;
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -32,7 +42,24 @@ export type ChannelPublic = {
   bound: number;
 };
 
+export type WechatBotPublic = {
+  id: string;
+  kind: typeof KIND_BOT;
+  enabled: boolean;
+  connected: boolean;
+  botId: string;
+  bound: number;
+};
+
 type BindCode = { userId: string; accountId: string; expiresAt: number };
+type QrSession = {
+  qrcode: string;
+  qrcodeUrl: string;
+  userId: string;
+  startedAt: number;
+  pollBase: string;
+  verifyCode?: string;
+};
 
 function newCode(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(4));
@@ -59,7 +86,10 @@ function jobLine(j: JobSummary, i: number): string {
 export class ChannelHub {
   private readonly codes = new Map<string, BindCode>();
   private readonly lastJob = new Map<string, string>();
+  private readonly lastContext = new Map<string, string>();
+  private readonly qrSessions = new Map<string, QrSession>();
   private accessToken?: { value: string; expiresAt: number };
+  private botAbort?: AbortController;
 
   constructor(
     private readonly cfg: Config,
@@ -67,7 +97,17 @@ export class ChannelHub {
     private readonly engine: JobEngine,
     private readonly now: () => number = Date.now,
     private readonly wxFetch: WxFetch = fetch,
+    private readonly ilinkFetch: IlinkFetch = fetch,
   ) {}
+
+  start(): void {
+    this.restartBotMonitor();
+  }
+
+  stop(): void {
+    this.botAbort?.abort();
+    this.botAbort = undefined;
+  }
 
   callbackInfo(requestUrl: string): { callbackUrl: string; httpsRequired: boolean } {
     const origin = siteOrigin(this.cfg, requestUrl);
@@ -122,33 +162,144 @@ export class ChannelHub {
       aes_key: aes,
       enabled,
       created_at: current?.created_at ?? this.now(),
+      base_url: current?.base_url ?? null,
+      sync_buf: current?.sync_buf ?? null,
     });
     this.accessToken = undefined;
     return this.publicWechat()!;
   }
 
   mintBindCode(userId: string): { code: string; expiresAt: number } {
-    const account = this.db.channels.getByKind(KIND);
-    if (!account || account.enabled !== 1 || !account.token) {
-      throw new Error("wechat channel is not enabled");
-    }
+    const account = this.enabledAccount() ?? this.enabledBot();
+    if (!account) throw new Error("wechat channel is not enabled");
     const code = newCode();
     const expiresAt = this.now() + BIND_TTL_MS;
     this.codes.set(code, { userId, accountId: account.id, expiresAt });
     return { code, expiresAt };
   }
 
-  bindingFor(userId: string): { bound: boolean; peerMasked?: string } {
-    const account = this.db.channels.getByKind(KIND);
-    if (!account) return { bound: false };
-    const row = this.db.channels.getBindingByUser(account.id, userId);
-    if (!row) return { bound: false };
-    return { bound: true, peerMasked: maskPeer(row.peer_id) };
+  bindingFor(userId: string): {
+    wechat: { bound: boolean; peerMasked?: string };
+    wechatBot: { bound: boolean; peerMasked?: string; connected: boolean };
+    enabled: boolean;
+  } {
+    const mp = this.bindingOn(KIND, userId);
+    const bot = this.enabledBot();
+    const botBind = this.bindingOn(KIND_BOT, userId);
+    return {
+      wechat: mp,
+      wechatBot: { ...botBind, connected: Boolean(bot?.token && bot.base_url) },
+      enabled: Boolean(this.enabledAccount() || bot),
+    };
   }
 
   unbind(userId: string): void {
-    const account = this.db.channels.getByKind(KIND);
-    if (account) this.db.channels.deleteBindingByUser(account.id, userId);
+    for (const kind of [KIND, KIND_BOT]) {
+      const account = this.db.channels.getByKind(kind);
+      if (account) this.db.channels.deleteBindingByUser(account.id, userId);
+    }
+  }
+
+  publicWechatBot(): WechatBotPublic | null {
+    const row = this.db.channels.getByKind(KIND_BOT);
+    if (!row) return null;
+    return {
+      id: row.id,
+      kind: KIND_BOT,
+      enabled: row.enabled === 1,
+      connected: Boolean(row.token && row.base_url && row.enabled === 1),
+      botId: row.app_id,
+      bound: this.db.channels.listBindings(row.id).length,
+    };
+  }
+
+  async startBotQr(userId: string): Promise<{ sessionKey: string; qrcodeUrl: string }> {
+    const qr = await fetchBotQr(this.ilinkFetch);
+    const sessionKey = crypto.randomUUID();
+    this.qrSessions.set(sessionKey, {
+      qrcode: qr.qrcode,
+      qrcodeUrl: qr.qrcodeUrl,
+      userId,
+      startedAt: this.now(),
+      pollBase: ILINK_QR_BASE,
+    });
+    return { sessionKey, qrcodeUrl: qr.qrcodeUrl };
+  }
+
+  async pollBotQr(
+    sessionKey: string,
+    verifyCode?: string,
+  ): Promise<{
+    status: string;
+    qrcodeUrl?: string;
+    connected?: boolean;
+    wechatBot?: WechatBotPublic;
+    message?: string;
+  }> {
+    const session = this.qrSessions.get(sessionKey);
+    if (!session || this.now() - session.startedAt > 8 * 60_000) {
+      this.qrSessions.delete(sessionKey);
+      return { status: "expired", message: "二维码已过期，请重新生成。" };
+    }
+    if (verifyCode) session.verifyCode = verifyCode;
+    const st = await pollQrStatus(this.ilinkFetch, session.qrcode, {
+      baseUrl: session.pollBase,
+      verifyCode: session.verifyCode,
+    });
+    if (st.status === "scaned_but_redirect" && st.redirect_host) {
+      session.pollBase = `https://${st.redirect_host}`;
+      return { status: st.status, qrcodeUrl: session.qrcodeUrl };
+    }
+    if (st.status === "confirmed") {
+      if (!st.bot_token || !st.ilink_bot_id) {
+        this.qrSessions.delete(sessionKey);
+        return { status: "error", message: "登录成功但未返回 bot token。" };
+      }
+      const current = this.db.channels.getByKind(KIND_BOT);
+      this.db.channels.upsertByKind({
+        id: current?.id ?? newChannelId(),
+        kind: KIND_BOT,
+        label: "WeChat Bot",
+        app_id: st.ilink_bot_id,
+        app_secret: null,
+        token: st.bot_token,
+        aes_key: null,
+        enabled: 1,
+        created_at: current?.created_at ?? this.now(),
+        base_url: (st.baseurl || ILINK_QR_BASE).replace(/\/$/, ""),
+        sync_buf: null,
+      });
+      const account = this.db.channels.getByKind(KIND_BOT)!;
+      if (st.ilink_user_id) {
+        this.db.channels.insertBinding({
+          id: newBindingId(),
+          account_id: account.id,
+          user_id: session.userId,
+          peer_id: st.ilink_user_id,
+          created_at: this.now(),
+        });
+      }
+      this.qrSessions.delete(sessionKey);
+      this.restartBotMonitor();
+      return { status: "confirmed", connected: true, wechatBot: this.publicWechatBot()! };
+    }
+    if (st.status === "expired" || st.status === "binded_redirect") {
+      this.qrSessions.delete(sessionKey);
+    }
+    return { status: st.status, qrcodeUrl: session.qrcodeUrl };
+  }
+
+  logoutBot(): void {
+    const current = this.db.channels.getByKind(KIND_BOT);
+    if (!current) return;
+    this.db.channels.upsertByKind({
+      ...current,
+      token: "",
+      enabled: 0,
+      base_url: null,
+      sync_buf: null,
+    });
+    this.stop();
   }
 
   verifyGet(query: { signature?: string; timestamp?: string; nonce?: string; echostr?: string }): string | undefined {
@@ -190,7 +341,7 @@ export class ChannelHub {
     }
 
     const msg = parseWechatXml(xml);
-    const reply = await this.dispatch(account.id, msg);
+    const reply = await this.dispatchMp(account.id, msg);
     if (!reply) return "success";
     const plain = wechatTextReply(msg.toUser, msg.fromUser, reply, this.now());
     if (account.aes_key && (encryptType === "aes" || encrypted)) {
@@ -203,17 +354,38 @@ export class ChannelHub {
   }
 
   async notify(job: JobSummary): Promise<void> {
-    const account = this.enabledAccount();
-    if (!account?.app_id || !account.app_secret) return;
-    const bindings = this.db.channels.listBindings(account.id);
-    if (bindings.length === 0) return;
-    const text = this.notifyText(job);
-    for (const b of bindings) {
-      this.lastJob.set(b.peer_id, job.id);
-      try {
-        await this.sendCustom(account.app_id, account.app_secret, b.peer_id, text);
-      } catch {
-        /* 48h window or network; inbound 列表 still works */
+    let text: string;
+    try {
+      text = this.notifyText(job);
+    } catch {
+      return;
+    }
+    const mp = this.enabledAccount();
+    if (mp?.app_id && mp.app_secret) {
+      for (const b of this.db.channels.listBindings(mp.id)) {
+        this.lastJob.set(b.peer_id, job.id);
+        try {
+          await this.sendCustom(mp.app_id, mp.app_secret, b.peer_id, text);
+        } catch {
+          /* 48h window; inbound 列表 still works */
+        }
+      }
+    }
+    const bot = this.enabledBot();
+    if (bot?.token && bot.base_url) {
+      for (const b of this.db.channels.listBindings(bot.id)) {
+        this.lastJob.set(b.peer_id, job.id);
+        try {
+          await sendBotText(this.ilinkFetch, {
+            baseUrl: bot.base_url,
+            token: bot.token,
+            toUserId: b.peer_id,
+            text,
+            contextToken: this.lastContext.get(b.peer_id),
+          });
+        } catch {
+          /* long-poll inbound still works */
+        }
       }
     }
   }
@@ -228,12 +400,103 @@ export class ChannelHub {
   }
 
   private enabledAccount() {
-    const row = this.db.channels.getByKind(KIND);
-    if (!row || row.enabled !== 1 || !row.token) return null;
-    return row;
+    try {
+      const row = this.db.channels.getByKind(KIND);
+      if (!row || row.enabled !== 1 || !row.token) return null;
+      return row;
+    } catch {
+      return null;
+    }
   }
 
-  private async dispatch(
+  private enabledBot() {
+    try {
+      const row = this.db.channels.getByKind(KIND_BOT);
+      if (!row || row.enabled !== 1 || !row.token || !row.base_url) return null;
+      return row;
+    } catch {
+      return null;
+    }
+  }
+
+  private bindingOn(kind: string, userId: string): { bound: boolean; peerMasked?: string } {
+    const account = this.db.channels.getByKind(kind);
+    if (!account) return { bound: false };
+    const row = this.db.channels.getBindingByUser(account.id, userId);
+    if (!row) return { bound: false };
+    return { bound: true, peerMasked: maskPeer(row.peer_id) };
+  }
+
+  private restartBotMonitor(): void {
+    this.stop();
+    const bot = this.enabledBot();
+    if (!bot) return;
+    this.botAbort = new AbortController();
+    void this.botLoop(bot.id, this.botAbort.signal);
+  }
+
+  private async botLoop(accountId: string, abort: AbortSignal): Promise<void> {
+    let failures = 0;
+    while (!abort.aborted) {
+      if (abort.aborted) return;
+      let account;
+      try {
+        account = this.db.channels.getById(accountId);
+      } catch {
+        return;
+      }
+      if (!account?.token || !account.base_url || account.enabled !== 1) return;
+      try {
+        const resp = await getUpdates(this.ilinkFetch, {
+          baseUrl: account.base_url,
+          token: account.token,
+          buf: account.sync_buf ?? "",
+          abort,
+        });
+        if ((resp.ret && resp.ret !== 0) || (resp.errcode && resp.errcode !== 0)) {
+          failures += 1;
+          await Bun.sleep(failures >= 3 ? 30_000 : 2_000);
+          if (failures >= 3) failures = 0;
+          continue;
+        }
+        failures = 0;
+        if (resp.get_updates_buf) this.db.channels.setSyncBuf(account.id, resp.get_updates_buf);
+        const list = resp.msgs ?? [];
+        if (list.length === 0) {
+          await Bun.sleep(400);
+          continue;
+        }
+        for (const msg of list) {
+          if (msg.message_type === 2) continue;
+          const peer = msg.from_user_id ?? "";
+          if (!peer) continue;
+          if (msg.context_token) this.lastContext.set(peer, msg.context_token);
+          const text = textFromIlink(msg);
+          if (!text) continue;
+          const reply = await this.handlePeerText(account.id, peer, text);
+          if (!reply) continue;
+          try {
+            await sendBotText(this.ilinkFetch, {
+              baseUrl: account.base_url,
+              token: account.token,
+              toUserId: peer,
+              text: reply,
+              contextToken: msg.context_token ?? this.lastContext.get(peer),
+            });
+          } catch {
+            /* next poll still works */
+          }
+        }
+      } catch {
+        if (abort.aborted) return;
+        failures += 1;
+        await Bun.sleep(failures >= 3 ? 30_000 : 2_000);
+        if (failures >= 3) failures = 0;
+      }
+    }
+  }
+
+  private async dispatchMp(
     accountId: string,
     msg: { fromUser: string; msgType: string; content: string; event: string },
   ): Promise<string | undefined> {
@@ -241,14 +504,17 @@ export class ChannelHub {
       return "发送绑定码（控制台 Channels 里复制）以绑定操作者。绑定后新会话会推到这里，直接回复即可。";
     }
     if (msg.msgType !== "text" || !msg.content) return undefined;
+    return this.handlePeerText(accountId, msg.fromUser, msg.content.trim());
+  }
 
-    const text = msg.content.trim();
+  private async handlePeerText(accountId: string, fromUser: string, text: string): Promise<string | undefined> {
+    if (!text) return undefined;
     const bind = /^BIND-([0-9A-HJKMNP-TV-Z]{5})$/i.exec(text);
     if (bind) {
-      return this.consumeBind(accountId, msg.fromUser, text.toUpperCase());
+      return this.consumeBind(accountId, fromUser, text.toUpperCase());
     }
 
-    const binding = this.db.channels.getBindingByPeer(accountId, msg.fromUser);
+    const binding = this.db.channels.getBindingByPeer(accountId, fromUser);
     if (!binding) {
       return "尚未绑定。打开 /console 设置里的 Channels，生成绑定码，发到这里。";
     }
@@ -259,7 +525,7 @@ export class ChannelHub {
 
     const lower = text.toLowerCase();
     if (lower === "列表" || lower === "list") return this.listText();
-    if (lower === "取消" || lower === "cancel") return this.cancelLast(msg.fromUser, user.id);
+    if (lower === "取消" || lower === "cancel") return this.cancelLast(fromUser, user.id);
     if (lower === "工具" || lower === "/tool") {
       return "工具调用请在控制台 Sessions 里操作。这里只接受文字回复。";
     }
@@ -275,7 +541,7 @@ export class ChannelHub {
     } else if (jobs.length === 1) {
       job = jobs[0];
     } else if (jobs.length > 1) {
-      const lastId = this.lastJob.get(msg.fromUser);
+      const lastId = this.lastJob.get(fromUser);
       job = jobs.find((j) => j.id === lastId) ?? undefined;
       if (!job) return `当前有 ${jobs.length} 条会话。发「列表」后用「1 回复内容」指定。`;
     }
@@ -284,7 +550,7 @@ export class ChannelHub {
 
     try {
       await this.engine.completeFromTest(job.id, [{ type: "text", text: body }], { sessionId: user.id });
-      this.lastJob.delete(msg.fromUser);
+      this.lastJob.delete(fromUser);
       return "已回复到会话。";
     } catch (err) {
       return err instanceof Error ? err.message : "回复失败。";

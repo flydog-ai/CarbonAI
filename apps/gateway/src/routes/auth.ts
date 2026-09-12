@@ -128,7 +128,7 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, ch
     const user = authedUser(c);
     if (!user) return c.json({ error: "unauthorized" }, 401);
     if (!channels) return c.json({ error: "unavailable" }, 503);
-    return c.json({ wechat: channels.bindingFor(user.id), enabled: Boolean(channels.publicWechat()?.enabled) });
+    return c.json(channels.bindingFor(user.id));
   });
 
   app.post("/api/me/channels/bind-code", (c) => {

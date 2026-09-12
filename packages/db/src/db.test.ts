@@ -213,6 +213,8 @@ describe("channels", () => {
       aes_key: null,
       enabled: 1,
       created_at: 1,
+      base_url: null,
+      sync_buf: null,
     });
     db.channels.upsertByKind({
       id: newChannelId(),
@@ -224,6 +226,8 @@ describe("channels", () => {
       aes_key: null,
       enabled: 1,
       created_at: 2,
+      base_url: null,
+      sync_buf: null,
     });
     expect(db.channels.getByKind("wechat_mp")?.app_id).toBe("wxapp2");
     const account = db.channels.getByKind("wechat_mp")!;

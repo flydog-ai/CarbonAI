@@ -1451,6 +1451,7 @@ function Settings({
       </p>
     </div>
     <ChannelAdmin t={t} flash={flash} copy={copy} />
+    <WechatBotAdmin t={t} flash={flash} />
     {canDesk ? <div style={{ marginTop: 16 }}><WechatBind t={t} copy={copy} /></div> : null}
     </div>
   );
@@ -1588,6 +1589,123 @@ function ChannelAdmin({
   );
 }
 
+function WechatBotAdmin({
+  t,
+  flash,
+}: {
+  t: (k: string, v?: Record<string, string | number>) => string;
+  flash: (msg: string) => void;
+}) {
+  const [connected, setConnected] = useState(false);
+  const [botId, setBotId] = useState("");
+  const [qr, setQr] = useState("");
+  const [sessionKey, setSessionKey] = useState("");
+  const [status, setStatus] = useState("");
+  const [verify, setVerify] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    const { res, body } = await api<{ wechatBot?: { connected?: boolean; botId?: string } }>("/api/admin/channels");
+    if (!res.ok) return;
+    setConnected(Boolean(body.wechatBot?.connected));
+    setBotId(body.wechatBot?.botId || "");
+  }
+  useEffect(() => { void load(); }, []);
+
+  useEffect(() => {
+    if (!sessionKey || connected) return;
+    const id = window.setInterval(() => {
+      void (async () => {
+        const { res, body } = await api<{
+          status?: string;
+          qrcodeUrl?: string;
+          connected?: boolean;
+          wechatBot?: { connected?: boolean; botId?: string };
+          message?: string;
+        }>(`/api/admin/channels/wechat-bot/qr?sessionKey=${encodeURIComponent(sessionKey)}${verify ? `&verifyCode=${encodeURIComponent(verify)}` : ""}`);
+        if (!res.ok) return;
+        setStatus(body.status || "");
+        if (body.qrcodeUrl) setQr(body.qrcodeUrl);
+        if (body.connected || body.status === "confirmed") {
+          setConnected(true);
+          setBotId(body.wechatBot?.botId || botId);
+          setSessionKey("");
+          flash(t("channels.botConnected"));
+        }
+        if (body.status === "expired" || body.status === "error") {
+          setErr(body.message || t("channels.botDisconnected"));
+          setSessionKey("");
+        }
+      })();
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [sessionKey, connected, verify, botId, flash, t]);
+
+  return (
+    <div className="card card-pad" style={{ maxWidth: 560, marginTop: 16 }}>
+      <h3>{t("channels.botTitle")}</h3>
+      <p className="sub">{t("channels.botSub")}</p>
+      <p>{connected ? `${t("channels.botConnected")}${botId ? ` · ${botId}` : ""}` : t("channels.botDisconnected")}</p>
+      {qr && !connected ? (
+        <p>
+          <img src={qr} alt="WeChat QR" style={{ maxWidth: 220, background: "#fff", padding: 8 }} />
+          <br />
+          <a href={qr} target="_blank" rel="noreferrer">{qr}</a>
+        </p>
+      ) : null}
+      {qr && !connected ? <p className="sub">{t("channels.botWaiting")} {status ? ` (${status})` : ""}</p> : null}
+      {status === "need_verifycode" ? (
+        <p>
+          <label>{t("channels.botVerify")}</label>
+          <input value={verify} onChange={(e) => setVerify(e.target.value)} />
+        </p>
+      ) : null}
+      {err ? <p className="err">{err}</p> : null}
+      <p style={{ margin: "12px 0 0", display: "flex", gap: 8 }}>
+        <button
+          className="btn btn-sm"
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setErr("");
+            const { res, body } = await api<{ sessionKey?: string; qrcodeUrl?: string; error?: string }>(
+              "/api/admin/channels/wechat-bot/qr",
+              { method: "POST" },
+            );
+            setBusy(false);
+            if (!res.ok || !body.sessionKey || !body.qrcodeUrl) {
+              setErr(body.error || t("settings.saveFailed"));
+              return;
+            }
+            setSessionKey(body.sessionKey);
+            setQr(body.qrcodeUrl);
+            setConnected(false);
+          }}
+        >
+          {t("channels.botScan")}
+        </button>
+        {connected ? (
+          <button
+            className="btn btn-sm btn-secondary"
+            type="button"
+            onClick={async () => {
+              await api("/api/admin/channels/wechat-bot/logout", { method: "POST" });
+              setConnected(false);
+              setBotId("");
+              setQr("");
+              setSessionKey("");
+            }}
+          >
+            {t("channels.botLogout")}
+          </button>
+        ) : null}
+      </p>
+    </div>
+  );
+}
+
 function WechatBind({
   t,
   copy,
@@ -1605,12 +1723,14 @@ function WechatBind({
     const { res, body } = await api<{
       enabled?: boolean;
       wechat?: { bound?: boolean; peerMasked?: string };
+      wechatBot?: { bound?: boolean; peerMasked?: string; connected?: boolean };
       error?: string;
     }>("/api/me/channels");
     if (!res.ok) return;
     setEnabled(Boolean(body.enabled));
-    setBound(Boolean(body.wechat?.bound));
-    setPeer(body.wechat?.peerMasked || "");
+    const peer = body.wechatBot?.peerMasked || body.wechat?.peerMasked || "";
+    setBound(Boolean(body.wechat?.bound || body.wechatBot?.bound));
+    setPeer(peer);
   }
   useEffect(() => { void load(); }, []);
 
