@@ -26,7 +26,7 @@ const handle = listen(app.fetch, {
 console.log(`Carbon AI listening on ${handle.urls.join("  ")}`);
 console.log("Prefer http://127.0.0.1:" + handle.port + " in client config (localhost works because ::1 is bound).");
 console.log(`console: http://127.0.0.1:${handle.port}/console`);
-console.log("guest keys: homepage mints a per-browser key (visitors table); carbon.toml [[auth.api_keys]] still works");
+console.log("homepage key: oldest live key on the superadmin desk; keys minted in /console stay on that account's desk");
 
 const shutdown = (): void => {
   handle.stop();

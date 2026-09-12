@@ -52,6 +52,20 @@ export class UserRepo {
     return row?.id;
   }
 
+  /** Oldest live key on the site desk — the homepage default. */
+  siteDeskKeyPlain(): string | undefined {
+    const id = this.siteDeskId();
+    if (!id) return undefined;
+    const row = this.sqlite
+      .query(
+        `SELECT key_plain FROM api_keys
+         WHERE user_id = ? AND revoked_at IS NULL AND key_plain IS NOT NULL AND key_plain != ''
+         ORDER BY created_at ASC LIMIT 1`,
+      )
+      .get(id) as { key_plain: string | null } | null;
+    return row?.key_plain || undefined;
+  }
+
   setPasswordHash(id: string, passwordHash: string): void {
     this.sqlite.query("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, id);
   }

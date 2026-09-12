@@ -6,7 +6,7 @@ export type HomePageData = {
   siteNameZh?: string;
   model: string;
   apiKey: string;
-  visitorKey?: boolean;
+  siteKey?: boolean;
 };
 
 function escapeHtml(value: string): string {
@@ -28,7 +28,7 @@ export function renderHomePage(data: HomePageData): string {
   const apiKey = escapeHtml(data.apiKey);
   const hasKey = Boolean(data.apiKey);
   const hasImport = Boolean(data.href);
-  const visitorKey = Boolean(data.visitorKey);
+  const siteKey = Boolean(data.siteKey);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -340,7 +340,7 @@ export function renderHomePage(data: HomePageData): string {
               <span></span>
             </div>
             <div class="row">
-              <span data-i18n="row.key">Guest key</span>
+              <span data-i18n="${siteKey ? "row.siteKey" : "row.key"}">${siteKey ? "Default key" : "Guest key"}</span>
               <code class="mono" id="home-key">${apiKey || "—"}</code>
               ${hasKey ? `<button class="btn btn-secondary btn-sm" type="button" data-copy="home-key" data-i18n="copy">Copy</button>` : `<span></span>`}
             </div>
@@ -364,10 +364,10 @@ export function renderHomePage(data: HomePageData): string {
             }
             ${
               hasKey
-                ? visitorKey
-                  ? `<p class="hint" data-i18n="hint.visitor">This import uses a guest key for this browser. No account. The operator sees a guest id, not your name.</p>`
+                ? siteKey
+                  ? `<p class="hint" data-i18n="hint.siteKey">This is the operator's default key. Jobs land on the site desk. Sign in at /console to mint a key that lands on your own desk.</p>`
                   : `<p class="hint" data-i18n="hint.guest">This import uses the local guest key from carbon.toml. No account. Anyone with the key can open jobs on this gateway.</p>`
-                : `<p class="hint" data-i18n="hint.nokey">No local guest key in carbon.toml. Sign in at /console and mint a user key.</p>`
+                : `<p class="hint" data-i18n="hint.nokey">No site default key yet. Sign in at /console to create the operator and mint a key.</p>`
             }
             <p class="hint" data-i18n="hint.cc">If Import does nothing, copy Base / Key / Model by hand. One URL and one key; /v1 is optional.</p>
           </div>
@@ -492,12 +492,13 @@ export function renderHomePage(data: HomePageData): string {
         "row.base": "Base URL",
         "row.model": "Model",
         "row.key": "Guest key",
+        "row.siteKey": "Default key",
         copy: "Copy",
         "loop.wait": "SSE open — desk composing",
         "loop.ok": "completion streamed on the same socket",
         "hint.guest": "This import uses the local guest key from carbon.toml. No account. Anyone with the key can open jobs on this gateway.",
-        "hint.visitor": "This import uses a guest key for this browser. No account. The operator sees a guest id, not your name.",
-        "hint.nokey": "No local guest key in carbon.toml. Sign in at /console and mint a user key.",
+        "hint.siteKey": "This is the operator's default key. Jobs land on the site desk. Sign in at /console to mint a key that lands on your own desk.",
+        "hint.nokey": "No site default key yet. Sign in at /console to create the operator and mint a key.",
         "hint.cc": "If Import does nothing, copy Base / Key / Model by hand. One URL and one key; /v1 is optional.",
         "pill.hang": "Attended completions",
         "pill.nov1": "One URL, one key, dual protocols",
@@ -532,7 +533,7 @@ export function renderHomePage(data: HomePageData): string {
         "fit.n2": "Unbounded parallel completions",
         "fit.n3": "Racing a GPU on tokens per second",
         "connect.title": "Connect in three minutes",
-        "connect.sub": "Point the base URL here. The rest of the client stays as-is. The guest key on this page is for trying the endpoint, not for production traffic.",
+        "connect.sub": "Point the base URL here. The rest of the client stays as-is. The key on this page is the site default. Sign in to mint a key that lands on your own desk.",
         "how.title": "How a completion returns",
         "how.sub": "Same socket. Same vendor envelope. The wait is the product.",
         "how.1": "The client POSTs to /v1/messages, /v1/chat/completions, or /v1/responses.",
@@ -568,12 +569,13 @@ export function renderHomePage(data: HomePageData): string {
         "row.base": "接口地址",
         "row.model": "模型",
         "row.key": "匿名密钥",
+        "row.siteKey": "默认密钥",
         copy: "复制",
         "loop.wait": "SSE 保持 — 工作台正在生成",
         "loop.ok": "补全在同一条连接上回流",
         "hint.guest": "这一键导入用的是 carbon.toml 里的本地匿名密钥，不用登录。拿到这把 key 就能往本机网关丢任务。",
-        "hint.visitor": "这一键导入用的是这台浏览器的匿名密钥，不用登录。操作者看到的是访客编号，不是你的名字。",
-        "hint.nokey": "toml 里没有本地匿名密钥。到 /console 登录并签发用户密钥。",
+        "hint.siteKey": "这是站点默认密钥（管理员工作台的第一把有效密钥）。任务进站点工作台。到 /console 登录后签发的密钥，只会进你自己的会话，不会串号。",
+        "hint.nokey": "还没有站点默认密钥。到 /console 创建管理员并签发一把密钥。",
         "hint.cc": "点了没反应：请手动抄地址、密钥、模型。一个地址一把密钥，/v1 可有可无。",
         "pill.hang": "值守补全",
         "pill.nov1": "一个地址，一把密钥，双协议",
@@ -608,7 +610,7 @@ export function renderHomePage(data: HomePageData): string {
         "fit.n2": "无上限并行补全",
         "fit.n3": "和 GPU 比 token/s",
         "connect.title": "三分钟接入",
-        "connect.sub": "把 base URL 指过来，客户端其余部分不用动。本页匿名密钥只用于试接口，不要当生产流量。",
+        "connect.sub": "把 base URL 指过来，客户端其余部分不用动。本页是站点默认密钥。登录后签发的密钥只会进你自己的会话。",
         "how.title": "补全怎么回来",
         "how.sub": "同一条连接。同一套厂商信封。等待本身就是产品。",
         "how.1": "客户端 POST 到 /v1/messages、/v1/chat/completions 或 /v1/responses。",

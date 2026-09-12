@@ -106,6 +106,51 @@ describe("users", () => {
     expect(db.users.getById(user.id)?.disabled).toBe(1);
     db.close();
   });
+
+  test("siteDeskKeyPlain is the oldest live key on the superadmin desk", async () => {
+    const db = openDatabase(tmp());
+    const admin = await newUser({ username: "admin", password: "password1", role: "superadmin", canReply: true });
+    const ada = await newUser({ username: "ada", password: "password1", canReply: true });
+    db.users.insert(admin);
+    db.users.insert(ada);
+    const now = Date.now();
+    db.users.insertKey({
+      id: newApiKeyId(),
+      user_id: admin.id,
+      label: "default",
+      key_hash: createHash("sha256").update("sk-admin-old").digest("hex"),
+      key_prefix: "sk-admin-old",
+      key_plain: "sk-admin-old",
+      created_at: now,
+      revoked_at: null,
+    });
+    db.users.insertKey({
+      id: newApiKeyId(),
+      user_id: admin.id,
+      label: "later",
+      key_hash: createHash("sha256").update("sk-admin-new").digest("hex"),
+      key_prefix: "sk-admin-new",
+      key_plain: "sk-admin-new",
+      created_at: now + 10,
+      revoked_at: null,
+    });
+    db.users.insertKey({
+      id: newApiKeyId(),
+      user_id: ada.id,
+      label: "ada",
+      key_hash: createHash("sha256").update("sk-ada").digest("hex"),
+      key_prefix: "sk-ada",
+      key_plain: "sk-ada",
+      created_at: now - 10,
+      revoked_at: null,
+    });
+    expect(db.users.siteDeskId()).toBe(admin.id);
+    expect(db.users.siteDeskKeyPlain()).toBe("sk-admin-old");
+    const doomed = db.users.listKeys(admin.id).find((k) => k.key_plain === "sk-admin-old")!;
+    db.users.revokeKey(doomed.id, now + 20);
+    expect(db.users.siteDeskKeyPlain()).toBe("sk-admin-new");
+    db.close();
+  });
 });
 
 describe("CarbonDb", () => {

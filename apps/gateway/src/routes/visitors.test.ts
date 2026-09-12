@@ -51,25 +51,22 @@ async function withSrv(fn: (url: string) => Promise<void>): Promise<void> {
 }
 
 describe("guest visitors", () => {
-  test("homepage mints a stable per-browser key and desk shows guest id plus client kind", async () => {
+  test("homepage shows the site default key for every browser; jobs land on the operator desk", async () => {
     await withSrv(async (url) => {
       const first = await fetch(`${url}/`);
       expect(first.status).toBe(200);
-      const vid = cookieFrom(first, "carbon_vid");
-      expect(vid.startsWith("carbon_vid=vis_")).toBe(true);
+      expect(cookieFrom(first, "carbon_vid")).toBe("");
       const html1 = await first.text();
       const key1 = homeKey(html1);
       expect(key1.startsWith("sk-carbon-")).toBe(true);
       expect(key1).not.toBe("sk-carbon-local");
-      expect(html1).toContain("guest key for this browser");
+      expect(html1).toContain("operator's default key");
 
-      const again = await fetch(`${url}/`, { headers: { cookie: vid } });
+      const again = await fetch(`${url}/`);
       expect(homeKey(await again.text())).toBe(key1);
 
       const other = await fetch(`${url}/`, { headers: { "user-agent": "Mozilla/5.0 Firefox/120" } });
-      const key2 = homeKey(await other.text());
-      expect(key2.startsWith("sk-carbon-")).toBe(true);
-      expect(key2).not.toBe(key1);
+      expect(homeKey(await other.text())).toBe(key1);
 
       const models = await fetch(`${url}/v1/models`, {
         headers: { "x-api-key": key1, "anthropic-version": "2023-06-01", "user-agent": "claude-cli/1.0.0" },
@@ -88,7 +85,7 @@ describe("guest visitors", () => {
           model: "carbon-default",
           max_tokens: 16,
           stream: true,
-          messages: [{ role: "user", content: "hello guest" }],
+          messages: [{ role: "user", content: "hello site" }],
         }),
       });
       expect(sse.status).toBe(200);
@@ -114,8 +111,8 @@ describe("guest visitors", () => {
           keyPrefix?: string;
         }[];
       };
-      const job = listed.jobs.find((j) => j.lastUserPreview?.includes("hello guest"));
-      expect(job?.callerLabel?.startsWith("G-")).toBe(true);
+      const job = listed.jobs.find((j) => j.lastUserPreview?.includes("hello site"));
+      expect(job?.callerLabel).toBe("admin");
       expect(job?.clientKind).toBe("claude-code");
       expect(job?.keyPrefix?.startsWith("sk-carbon-")).toBe(true);
       expect(job?.clientIp).toBe("127.0.0.1");
@@ -126,19 +123,7 @@ describe("guest visitors", () => {
       const body = (await callers.json()) as {
         callers: { label: string; kind: string; clientKind?: string; presence: string }[];
       };
-      expect(body.callers.some((c) => c.kind === "guest" && c.label.startsWith("G-") && c.clientKind === "claude-code")).toBe(true);
-
-      const otherCli = await fetch(`${url}/v1/models`, {
-        headers: {
-          "x-api-key": key1,
-          "anthropic-version": "2023-06-01",
-          "user-agent": "codex-cli/0.44",
-        },
-      });
-      expect(otherCli.status).toBe(200);
-      const callers2 = await fetch(`${url}/api/operator/callers`, { headers: auth });
-      const body2 = (await callers2.json()) as { callers: { label: string; clientKind?: string }[] };
-      expect(body2.callers.some((c) => c.clientKind === "claude-code")).toBe(true);
+      expect(body.callers.some((c) => c.kind === "user" && c.label === "admin" && c.clientKind === "claude-code")).toBe(true);
     });
   });
 
