@@ -1352,6 +1352,9 @@ function Users({
   );
 }
 
+type SettingsSection = "basic" | "connect";
+type ConnectKind = "wechat_mp" | "wechat_bot" | "feishu" | "dingtalk" | "telegram";
+
 function Settings({
   t,
   flash,
@@ -1365,6 +1368,10 @@ function Settings({
   copy: (text: string, ok: string) => void;
   canDesk: boolean;
 }) {
+  const [section, setSection] = useState<SettingsSection>("basic");
+  const [kind, setKind] = useState<ConnectKind>("wechat_mp");
+  const [mpOn, setMpOn] = useState(false);
+  const [botOn, setBotOn] = useState(false);
   const [form, setForm] = useState<SiteSettings>({
     name: "Carbon AI",
     nameZh: "碳基智能",
@@ -1390,69 +1397,135 @@ function Settings({
       autoOrigin: body.autoOrigin || "",
     });
   }
-  useEffect(() => { void load(); }, []);
+  async function loadConnect() {
+    const { res, body } = await api<{
+      wechat?: { enabled?: boolean };
+      wechatBot?: { connected?: boolean };
+    }>("/api/admin/channels");
+    if (!res.ok) return;
+    setMpOn(Boolean(body.wechat?.enabled));
+    setBotOn(Boolean(body.wechatBot?.connected));
+  }
+  useEffect(() => { void load(); void loadConnect(); }, []);
+
+  const types: { id: ConnectKind; soon?: boolean; on?: boolean }[] = [
+    { id: "wechat_mp", on: mpOn },
+    { id: "wechat_bot", on: botOn },
+    { id: "feishu", soon: true },
+    { id: "dingtalk", soon: true },
+    { id: "telegram", soon: true },
+  ];
 
   return (
-    <div>
-    <div className="card card-pad" style={{ maxWidth: 560 }}>
-      <h3>{t("settings.title")}</h3>
-      <p className="sub">{t("settings.sub")}</p>
-      <label>{t("settings.name")}</label>
-      <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={64} />
-      <label>{t("settings.nameZh")}</label>
-      <input value={form.nameZh} onChange={(e) => setForm({ ...form, nameZh: e.target.value })} maxLength={64} />
-      <label>{t("settings.origin")}</label>
-      <input
-        className="mono"
-        value={form.publicOrigin}
-        placeholder={form.autoOrigin || "http://127.0.0.1:12580"}
-        onChange={(e) => setForm({ ...form, publicOrigin: e.target.value })}
-      />
-      <p className="sub" style={{ marginTop: 6 }}>{t("settings.originHint")}</p>
-      <label>{t("settings.display")}</label>
-      <input value={form.defaultDisplay} onChange={(e) => setForm({ ...form, defaultDisplay: e.target.value })} maxLength={64} />
-      <p className="err">{err}</p>
-      <p style={{ margin: "16px 0 0" }}>
-        <button
-          className="btn"
-          type="button"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            setErr("");
-            const { res, body } = await api<SiteSettings & { error?: string }>("/api/admin/settings", {
-              method: "PATCH",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                name: form.name,
-                nameZh: form.nameZh,
-                publicOrigin: form.publicOrigin,
-                defaultDisplay: form.defaultDisplay,
-              }),
-            });
-            setBusy(false);
-            if (!res.ok) {
-              setErr(body.error || t("settings.saveFailed"));
-              return;
-            }
-            setForm({
-              name: body.name,
-              nameZh: body.nameZh,
-              publicOrigin: body.publicOrigin,
-              defaultDisplay: body.defaultDisplay,
-              autoOrigin: body.autoOrigin || form.autoOrigin,
-            });
-            onSite(body.name);
-            flash(t("settings.saved"));
-          }}
-        >
-          {busy ? t("settings.saving") : t("settings.save")}
-        </button>
-      </p>
-    </div>
-    <ChannelAdmin t={t} flash={flash} copy={copy} />
-    <WechatBotAdmin t={t} flash={flash} />
-    {canDesk ? <div style={{ marginTop: 16 }}><WechatBind t={t} copy={copy} /></div> : null}
+    <div className="settings-page">
+      <div className="settings-tabs">
+        <div className="seg-switch" role="tablist">
+          <button type="button" className={section === "basic" ? "on" : ""} onClick={() => setSection("basic")}>
+            {t("settings.section.basic")}
+          </button>
+          <button type="button" className={section === "connect" ? "on" : ""} onClick={() => setSection("connect")}>
+            {t("settings.section.connect")}
+          </button>
+        </div>
+      </div>
+
+      {section === "basic" ? (
+        <div className="card card-pad">
+          <h3>{t("settings.title")}</h3>
+          <p className="sub">{t("settings.sub")}</p>
+          <label>{t("settings.name")}</label>
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={64} />
+          <label>{t("settings.nameZh")}</label>
+          <input value={form.nameZh} onChange={(e) => setForm({ ...form, nameZh: e.target.value })} maxLength={64} />
+          <label>{t("settings.origin")}</label>
+          <input
+            className="mono"
+            value={form.publicOrigin}
+            placeholder={form.autoOrigin || "http://127.0.0.1:12580"}
+            onChange={(e) => setForm({ ...form, publicOrigin: e.target.value })}
+          />
+          <p className="sub" style={{ marginTop: 6 }}>{t("settings.originHint")}</p>
+          <label>{t("settings.display")}</label>
+          <input value={form.defaultDisplay} onChange={(e) => setForm({ ...form, defaultDisplay: e.target.value })} maxLength={64} />
+          <p className="err">{err}</p>
+          <p style={{ margin: "16px 0 0" }}>
+            <button
+              className="btn"
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setErr("");
+                const { res, body } = await api<SiteSettings & { error?: string }>("/api/admin/settings", {
+                  method: "PATCH",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({
+                    name: form.name,
+                    nameZh: form.nameZh,
+                    publicOrigin: form.publicOrigin,
+                    defaultDisplay: form.defaultDisplay,
+                  }),
+                });
+                setBusy(false);
+                if (!res.ok) {
+                  setErr(body.error || t("settings.saveFailed"));
+                  return;
+                }
+                setForm({
+                  name: body.name,
+                  nameZh: body.nameZh,
+                  publicOrigin: body.publicOrigin,
+                  defaultDisplay: body.defaultDisplay,
+                  autoOrigin: body.autoOrigin || form.autoOrigin,
+                });
+                onSite(body.name);
+                flash(t("settings.saved"));
+              }}
+            >
+              {busy ? t("settings.saving") : t("settings.save")}
+            </button>
+          </p>
+        </div>
+      ) : (
+        <div>
+          <p className="sub" style={{ margin: "0 0 12px" }}>{t("settings.connectSub")}</p>
+          <div className="connect-layout">
+            <nav className="connect-list" aria-label={t("settings.connectTitle")}>
+              {types.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`connect-item${kind === item.id ? " on" : ""}`}
+                  onClick={() => setKind(item.id)}
+                >
+                  <b>{t(`connect.${item.id}`)}</b>
+                  <span>{t(`connect.${item.id}Hint`)}</span>
+                  <em className={`connect-st${item.on ? " on" : ""}`}>
+                    {item.soon ? t("connect.statusSoon") : item.on ? t("connect.statusOn") : t("connect.statusOff")}
+                  </em>
+                </button>
+              ))}
+            </nav>
+            <div className="connect-panel">
+              {kind === "wechat_mp" ? (
+                <>
+                  <ChannelAdmin t={t} flash={flash} copy={copy} onStatus={setMpOn} />
+                  {canDesk ? <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--line)" }}><WechatBind t={t} copy={copy} framed={false} /></div> : null}
+                </>
+              ) : null}
+              {kind === "wechat_bot" ? <WechatBotAdmin t={t} flash={flash} onStatus={setBotOn} /> : null}
+              {kind === "feishu" || kind === "dingtalk" || kind === "telegram" ? (
+                <>
+                  <h3>{t(`connect.${kind}`)}</h3>
+                  <p className="sub">{t(`connect.${kind}Hint`)}</p>
+                  <p className="sub" style={{ marginTop: 12 }}>{t("connect.soonTitle")}</p>
+                  <p className="sub">{t("connect.soonBody")}</p>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1473,10 +1546,12 @@ function ChannelAdmin({
   t,
   flash,
   copy,
+  onStatus,
 }: {
   t: (k: string, v?: Record<string, string | number>) => string;
   flash: (msg: string) => void;
   copy: (text: string, ok: string) => void;
+  onStatus?: (on: boolean) => void;
 }) {
   const [callbackUrl, setCallbackUrl] = useState("");
   const [httpsRequired, setHttpsRequired] = useState(false);
@@ -1506,12 +1581,13 @@ function ChannelAdmin({
     setWechat(body.wechat || null);
     setAppId(body.wechat?.appId || "");
     setEnabled(Boolean(body.wechat?.enabled));
+    onStatus?.(Boolean(body.wechat?.enabled));
   }
   useEffect(() => { void load(); }, []);
 
   return (
-    <div className="card card-pad" style={{ maxWidth: 560, marginTop: 16 }}>
-      <h3>{t("channels.title")}</h3>
+    <div>
+      <h3>{t("connect.wechat_mp")}</h3>
       <p className="sub">{t("channels.sub")}</p>
       <p className="sub">{t("channels.replyWhere")}</p>
       {wechat && !wechat.pushReady ? <p className="err">{t("channels.pushNeedSecret")}</p> : null}
@@ -1584,6 +1660,7 @@ function ChannelAdmin({
             setWechat(body.wechat || null);
             setAppId(body.wechat?.appId || appId);
             setEnabled(Boolean(body.wechat?.enabled));
+            onStatus?.(Boolean(body.wechat?.enabled));
             flash(t("channels.saved"));
           }}
         >
@@ -1597,9 +1674,11 @@ function ChannelAdmin({
 function WechatBotAdmin({
   t,
   flash,
+  onStatus,
 }: {
   t: (k: string, v?: Record<string, string | number>) => string;
   flash: (msg: string) => void;
+  onStatus?: (on: boolean) => void;
 }) {
   const [connected, setConnected] = useState(false);
   const [botId, setBotId] = useState("");
@@ -1615,6 +1694,7 @@ function WechatBotAdmin({
     if (!res.ok) return;
     setConnected(Boolean(body.wechatBot?.connected));
     setBotId(body.wechatBot?.botId || "");
+    onStatus?.(Boolean(body.wechatBot?.connected));
   }
   useEffect(() => { void load(); }, []);
 
@@ -1638,6 +1718,7 @@ function WechatBotAdmin({
           setConnected(true);
           setBotId(body.wechatBot?.botId || botId);
           setSessionKey("");
+          onStatus?.(true);
           flash(t("channels.botConnected"));
         }
         if (body.status === "expired" || body.status === "error") {
@@ -1650,15 +1731,13 @@ function WechatBotAdmin({
   }, [sessionKey, connected, verify, botId, flash, t]);
 
   return (
-    <div className="card card-pad" style={{ maxWidth: 560, marginTop: 16 }}>
-      <h3>{t("channels.botTitle")}</h3>
+    <div>
+      <h3>{t("connect.wechat_bot")}</h3>
       <p className="sub">{t("channels.botSub")}</p>
       <p>{connected ? `${t("channels.botConnected")}${botId ? ` · ${botId}` : ""}` : t("channels.botDisconnected")}</p>
       {qr && !connected ? (
         <p>
-          <img src={qr} alt="WeChat QR" style={{ maxWidth: 220, background: "#fff", padding: 8 }} />
-          <br />
-          <a href={qr} target="_blank" rel="noreferrer">{qr}</a>
+          <img src={qr} alt="WeChat QR" style={{ maxWidth: 220, background: "#fff", padding: 8, borderRadius: 8 }} />
         </p>
       ) : null}
       {qr && !connected ? <p className="sub">{t("channels.botWaiting")} {status ? ` (${status})` : ""}</p> : null}
@@ -1703,6 +1782,7 @@ function WechatBotAdmin({
               setBotId("");
               setQr("");
               setSessionKey("");
+              onStatus?.(false);
             }}
           >
             {t("channels.botLogout")}
@@ -1716,9 +1796,11 @@ function WechatBotAdmin({
 function WechatBind({
   t,
   copy,
+  framed = true,
 }: {
   t: (k: string, v?: Record<string, string | number>) => string;
   copy: (text: string, ok: string) => void;
+  framed?: boolean;
 }) {
   const [enabled, setEnabled] = useState(false);
   const [bound, setBound] = useState(false);
@@ -1741,8 +1823,8 @@ function WechatBind({
   }
   useEffect(() => { void load(); }, []);
 
-  return (
-    <div className="card card-pad" style={{ maxWidth: 560, marginTop: 16 }}>
+  const inner = (
+    <>
       <h3>{t("channels.bind")}</h3>
       <p className="sub">
         {bound ? t("channels.bound", { peer }) : enabled ? t("channels.unbound") : t("channels.needEnable")}
@@ -1793,6 +1875,7 @@ function WechatBind({
           </button>
         ) : null}
       </p>
-    </div>
+    </>
   );
+  return framed ? <div className="card card-pad" style={{ maxWidth: 560, marginTop: 16 }}>{inner}</div> : inner;
 }
