@@ -16,7 +16,7 @@ import {
   ThemeSwitch,
 } from "./components.tsx";
 import { detectLang, translate } from "./i18n.ts";
-import { callerTitle, copyText, filterTools, formatParams, fmtWhen, groupThreads, initials, isLive, isPresent, readView, secretPrefix, setViewUrl, threadKey } from "./lib.ts";
+import { callerTitle, copyText, filterTools, formatParams, fmtWhen, groupThreads, initials, isLive, readView, secretPrefix, setViewUrl, threadKey } from "./lib.ts";
 import { ChatItem } from "./ChatItem.tsx";
 import { pendingFromTool, ToolDraftCard, type PendingTool } from "./ToolDraft.tsx";
 import { Mark } from "./brand/Mark.tsx";
@@ -472,7 +472,6 @@ function sessionMeta(
   if (!j) return "";
   const parts = [kindLabel(t, j.clientKind), j.clientIp].filter(Boolean);
   if (isLive(j) || j.presence === "live") parts.push(t("desk.waiting"));
-  else if (j.presence === "online") parts.push(t("desk.online"));
   else if (j.lastSeenAt) parts.push(t("desk.lastSeen", { when: fmtWhen(j.lastSeenAt, t) }));
   if (j.turnCount && j.turnCount > 1) parts.push(t("desk.turns", { n: j.turnCount }));
   return parts.join(" · ");
@@ -977,11 +976,7 @@ function Sessions({
               {kindLabel(t, j.clientKind) ? <span className="conv-kind">{kindLabel(t, j.clientKind)}</span> : null}
               <span className="conv-prev">{j.lastUserPreview || t("desk.noUserText")}</span>
             </span>
-            {isLive(j) ? (
-              <span className="conv-dot" title={statusLabel(j.status)} />
-            ) : isPresent(j) ? (
-              <span className="conv-dot online" title={t("desk.online")} />
-            ) : null}
+            {isLive(j) ? <span className="conv-dot" title={t("desk.waiting")} /> : null}
           </button>
         )) : <p className="empty">{t("desk.empty")}</p>}
       </aside>
