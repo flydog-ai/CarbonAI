@@ -155,6 +155,10 @@ describe("HTTP smoke (real listen)", () => {
     expect(html).toContain("sk-carbon-local");
     expect(html).toContain("claude-fable-5-1");
     expect(html).toContain("Guest key");
+    expect(html).toContain("id=\"home-promo\"");
+    expect(html).toContain("狠狠地开蹬");
+    expect(html).toContain("{base}");
+    expect(html).toContain("{key}");
     expect(html).toContain("/console");
     expect(html).not.toContain(encodeURIComponent(`${srv.url4}/v1`));
     const consolePage = await fetch(`${srv.url4}/console`);

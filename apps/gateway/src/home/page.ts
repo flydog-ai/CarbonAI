@@ -203,7 +203,7 @@ export function renderHomePage(data: HomePageData): string {
     }
     .loop .ok { color: var(--ok); } .loop .wait { color: var(--primary); } .loop .cmd { color: #7eb8e8; }
     .hint { margin: 12px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
-    .panel-actions { margin-top: 14px; }
+    .panel-actions { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
     .panel-actions .btn { width: 100%; }
     .pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; max-width: 1120px; margin: 0 auto 36px; }
     .pill {
@@ -336,7 +336,7 @@ export function renderHomePage(data: HomePageData): string {
             </div>
             <div class="row">
               <span data-i18n="row.model">Model</span>
-              <code class="mono">${model}</code>
+              <code class="mono" id="home-model">${model}</code>
               <span></span>
             </div>
             <div class="row">
@@ -350,8 +350,16 @@ export function renderHomePage(data: HomePageData): string {
               <div class="ok" data-i18n="loop.ok">completion streamed on the same socket</div>
             </div>
             ${
-              hasImport
-                ? `<div class="panel-actions"><a class="btn btn-primary" id="cc-switch-import" href="${href}" data-i18n="cta.import">Import into Claude Code</a></div>`
+              hasImport || hasKey
+                ? `<div class="panel-actions">${
+                    hasImport
+                      ? `<a class="btn btn-primary" id="cc-switch-import" href="${href}" data-i18n="cta.import">Import into Claude Code</a>`
+                      : ""
+                  }${
+                    hasKey
+                      ? `<button class="btn btn-secondary" type="button" id="home-promo" data-i18n="cta.promo">Copy a share blurb</button>`
+                      : ""
+                  }</div>`
                 : ""
             }
             ${
@@ -479,6 +487,8 @@ export function renderHomePage(data: HomePageData): string {
         "cta.import": "Import into Claude Code",
         "cta.console": "Open console",
         "cta.connect": "Connect in three minutes",
+        "cta.promo": "Copy a share blurb",
+        promo: "Found a limited-time, forever-free model API and token. Grab it and floor it.\\n\\nBase URL: {base}\\nKey: {key}\\nModel: {model}\\n\\nPoint your client here. OpenAI-compatible and Anthropic Messages. No SDK changes.",
         "row.base": "Base URL",
         "row.model": "Model",
         "row.key": "Guest key",
@@ -553,6 +563,8 @@ export function renderHomePage(data: HomePageData): string {
         "cta.import": "导入到 Claude Code",
         "cta.console": "打开控制台",
         "cta.connect": "三分钟接入",
+        "cta.promo": "复制推广文案",
+        promo: "终于发现了一个限时免费、永久免费的 API 和 Token 地址，兄弟们抓紧时间，狠狠地开蹬！\\n\\n接口: {base}\\n密钥: {key}\\n模型: {model}\\n\\n改个 base_url 就能接，OpenAI / Anthropic 都行，SDK 不用动。",
         "row.base": "接口地址",
         "row.model": "模型",
         "row.key": "匿名密钥",
@@ -684,6 +696,23 @@ export function renderHomePage(data: HomePageData): string {
         }
       });
     });
+    var promoBtn = document.getElementById("home-promo");
+    if (promoBtn) {
+      promoBtn.addEventListener("click", async function () {
+        var lang = document.documentElement.dataset.lang || "en";
+        var tpl = (I18N[lang] && I18N[lang].promo) || I18N.en.promo;
+        var text = tpl
+          .replace("{base}", (document.getElementById("home-endpoint") || {}).textContent || "")
+          .replace("{key}", (document.getElementById("home-key") || {}).textContent || "")
+          .replace("{model}", (document.getElementById("home-model") || {}).textContent || "");
+        try {
+          await navigator.clipboard.writeText(text);
+          toast(I18N[lang].copied);
+        } catch (e) {
+          toast(I18N[lang].copyFailed);
+        }
+      });
+    }
     document.querySelectorAll("[data-tab]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var id = btn.getAttribute("data-tab");
