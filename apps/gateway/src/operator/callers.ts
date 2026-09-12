@@ -45,8 +45,16 @@ export function decorateJobs(db: CarbonDb, jobs: JobSummary[], now = Date.now())
   });
 }
 
-export function listCallers(db: CarbonDb, engine: JobEngine, now = Date.now(), ownerId?: string): CallerView[] {
-  const jobs = ownerId ? engine.list().filter((j) => j.ownerId === ownerId) : engine.list();
+export function listCallers(
+  db: CarbonDb,
+  engine: JobEngine,
+  now = Date.now(),
+  ownerId?: string,
+  siteDeskId?: string,
+): CallerView[] {
+  const jobs = ownerId
+    ? engine.list().filter((j) => (j.ownerId ?? siteDeskId) === ownerId)
+    : engine.list();
   const live = jobs.filter((j) => isLive(j.status));
   const liveByVisitor = new Map<string, number>();
   const liveByUser = new Map<string, number>();
