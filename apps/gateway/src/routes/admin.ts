@@ -9,10 +9,11 @@ import {
 } from "@carbon-ai/config";
 import type { CarbonDb } from "@carbon-ai/db";
 import { USER_COOKIE, UserSessions } from "../auth/user-session.ts";
+import type { ChannelHub } from "../channels/hub.ts";
 import { preferLoopbackOrigin } from "../home/cc-switch.ts";
 import { readJsonCapped } from "../http/read-json-capped.ts";
 
-export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): Hono {
+export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, channels?: ChannelHub): Hono {
   const app = new Hono();
 
   const superadmin = (c: Context) => {
@@ -68,6 +69,42 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): 
     return c.json({
       ...publicSettings(cfg),
       autoOrigin: preferLoopbackOrigin(c.req.url),
+    });
+  });
+
+  app.get("/api/admin/channels", (c) => {
+    if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    return c.json({
+      ...channels.callbackInfo(c.req.url),
+      wechat: channels.publicWechat(),
+    });
+  });
+
+  app.patch("/api/admin/channels", async (c) => {
+    if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    const body = (await readJsonCapped(c.req.raw, 8192)) as {
+      kind?: string;
+      label?: string;
+      appId?: string;
+      appSecret?: string;
+      token?: string;
+      aesKey?: string | null;
+      enabled?: boolean;
+    };
+    if (body.kind && body.kind !== "wechat_mp") return c.json({ error: "unsupported channel" }, 400);
+    const wechat = channels.upsertWechat({
+      label: body.label,
+      appId: body.appId,
+      appSecret: body.appSecret,
+      token: body.token,
+      aesKey: body.aesKey,
+      enabled: body.enabled,
+    });
+    return c.json({
+      ...channels.callbackInfo(c.req.url),
+      wechat,
     });
   });
 

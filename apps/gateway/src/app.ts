@@ -18,11 +18,14 @@ import { debugJobRoutes } from "./routes/debug-jobs.ts";
 import { consoleRoutes } from "./routes/console.ts";
 import { operatorRoutes } from "./routes/operator.ts";
 import { accessLog } from "./http/access-log.ts";
+import { ChannelHub } from "./channels/hub.ts";
+import { hookRoutes } from "./routes/hooks.ts";
 
 export type AppDeps = {
   sessions?: HangRegistry;
   engine?: JobEngine;
   db?: CarbonDb;
+  channels?: ChannelHub;
 };
 
 /**
@@ -42,8 +45,13 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Hono {
   app.route("/", debugRoutes(sessions));
   if (deps.engine && deps.db) {
     const userSessions = new UserSessions(deps.db.sessions);
-    app.route("/", authRoutes(cfg, deps.db, userSessions));
-    app.route("/", adminRoutes(cfg, deps.db, userSessions));
+    const channels = deps.channels ?? new ChannelHub(cfg, deps.db, deps.engine);
+    deps.engine.onLive = (job) => {
+      void channels.notify(job);
+    };
+    app.route("/", hookRoutes(channels));
+    app.route("/", authRoutes(cfg, deps.db, userSessions, channels));
+    app.route("/", adminRoutes(cfg, deps.db, userSessions, channels));
     app.route("/", operatorRoutes(cfg, deps.engine, deps.db, userSessions));
     app.route("/", vendorRoutes(cfg, deps.engine, deps.db));
     app.route("/", openaiResponsesRoutes(cfg, deps.engine, deps.db));

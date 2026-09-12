@@ -107,6 +107,31 @@ CREATE TABLE IF NOT EXISTS visitors (
 
 CREATE INDEX IF NOT EXISTS visitors_fingerprint ON visitors(fingerprint);
 CREATE INDEX IF NOT EXISTS visitors_seen ON visitors(last_seen_at);
+
+CREATE TABLE IF NOT EXISTS channel_accounts (
+  id          TEXT PRIMARY KEY,
+  kind        TEXT NOT NULL,
+  label       TEXT NOT NULL,
+  app_id      TEXT NOT NULL DEFAULT '',
+  app_secret  TEXT,
+  token       TEXT NOT NULL DEFAULT '',
+  aes_key     TEXT,
+  enabled     INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS channel_accounts_kind ON channel_accounts(kind);
+
+CREATE TABLE IF NOT EXISTS channel_bindings (
+  id          TEXT PRIMARY KEY,
+  account_id  TEXT NOT NULL REFERENCES channel_accounts(id),
+  user_id     TEXT NOT NULL REFERENCES users(id),
+  peer_id     TEXT NOT NULL,
+  created_at  INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS channel_bindings_peer ON channel_bindings(account_id, peer_id);
+CREATE INDEX IF NOT EXISTS channel_bindings_user ON channel_bindings(account_id, user_id);
 `;
 
 export type JobRow = {
@@ -179,6 +204,26 @@ export type SessionRow = {
   user_id: string;
   created_at: number;
   expires_at: number;
+};
+
+export type ChannelAccountRow = {
+  id: string;
+  kind: string;
+  label: string;
+  app_id: string;
+  app_secret: string | null;
+  token: string;
+  aes_key: string | null;
+  enabled: number;
+  created_at: number;
+};
+
+export type ChannelBindingRow = {
+  id: string;
+  account_id: string;
+  user_id: string;
+  peer_id: string;
+  created_at: number;
 };
 
 export type VisitorRow = {

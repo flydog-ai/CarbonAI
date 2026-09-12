@@ -6,6 +6,7 @@ import { SessionRepo } from "./sessions.ts";
 import { SettingsRepo } from "./settings.ts";
 import { UserRepo } from "./users.ts";
 import { VisitorRepo } from "./visitors.ts";
+import { ChannelRepo } from "./channels.ts";
 
 const RAW_INLINE_LIMIT = 1024 * 1024;
 
@@ -17,6 +18,7 @@ export class CarbonDb {
   readonly settings: SettingsRepo;
   readonly sessions: SessionRepo;
   readonly visitors: VisitorRepo;
+  readonly channels: ChannelRepo;
 
   constructor(
     readonly sqlite: Database,
@@ -29,6 +31,7 @@ export class CarbonDb {
     this.settings = new SettingsRepo(sqlite);
     this.sessions = new SessionRepo(sqlite);
     this.visitors = new VisitorRepo(sqlite);
+    this.channels = new ChannelRepo(sqlite);
     mkdirSync(this.blobDir, { recursive: true, mode: 0o700 });
   }
 

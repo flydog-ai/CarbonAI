@@ -130,6 +130,7 @@ export class JobEngine {
   private mutex: Promise<void> = Promise.resolve();
   private claimSweeper?: ReturnType<typeof setInterval>;
   private retentionTimer?: ReturnType<typeof setInterval>;
+  onLive?: (job: JobSummary) => void;
 
   constructor(
     private readonly cfg: Config,
@@ -167,7 +168,7 @@ export class JobEngine {
   }
 
   async create(input: CreateJobInput): Promise<JobSummary> {
-    return this.lock(async () => {
+    const summary = await this.lock(async () => {
       const live = [...this.jobs.values()].filter((j) => LIVE.includes(j.status)).length;
       if (live >= this.cfg.jobs.maxPending) throw new JobQueueFullError();
 
@@ -285,6 +286,12 @@ export class JobEngine {
       this.jobs.set(id, rt);
       return this.summary(rt);
     });
+    try {
+      this.onLive?.(summary);
+    } catch {
+      /* channel notify must not fail job create */
+    }
+    return summary;
   }
 
   async attachSse(jobId: string, writer: SseSink, adapter?: ProtocolAdapter): Promise<void> {

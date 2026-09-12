@@ -6,6 +6,7 @@ import { claudeModelSlots } from "@carbon-ai/protocol";
 import { resetBootstrapIfRequested } from "../auth/bootstrap.ts";
 import { apiKeyPrefix, hashApiKey, mintApiKeyPlaintext, verifyClientKey } from "../auth/client-keys.ts";
 import { USER_COOKIE, USER_SESSION_TTL_SEC, UserSessions } from "../auth/user-session.ts";
+import type { ChannelHub } from "../channels/hub.ts";
 import { buildCcSwitchClaudeImportHref, siteOrigin } from "../home/cc-switch.ts";
 import { readJsonCapped } from "../http/read-json-capped.ts";
 
@@ -30,7 +31,7 @@ function setUserCookie(c: Context, sessionId: string): void {
   });
 }
 
-export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): Hono {
+export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, channels?: ChannelHub): Hono {
   const app = new Hono();
   const authedUser = (c: Context) => {
     const s = sessions.get(getCookie(c, USER_COOKIE));
@@ -121,6 +122,33 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions): H
     const user = authedUser(c);
     if (!user) return c.json({ error: "unauthorized" }, 401);
     return c.json({ user: publicUser(user) });
+  });
+
+  app.get("/api/me/channels", (c) => {
+    const user = authedUser(c);
+    if (!user) return c.json({ error: "unauthorized" }, 401);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    return c.json({ wechat: channels.bindingFor(user.id), enabled: Boolean(channels.publicWechat()?.enabled) });
+  });
+
+  app.post("/api/me/channels/bind-code", (c) => {
+    const user = authedUser(c);
+    if (!user) return c.json({ error: "unauthorized" }, 401);
+    if (!user.can_reply) return c.json({ error: "no reply permission" }, 403);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    try {
+      return c.json(channels.mintBindCode(user.id));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "bind failed" }, 400);
+    }
+  });
+
+  app.post("/api/me/channels/unbind", (c) => {
+    const user = authedUser(c);
+    if (!user) return c.json({ error: "unauthorized" }, 401);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    channels.unbind(user.id);
+    return c.json({ ok: true });
   });
 
   app.get("/api/me/guest-key", (c) => {

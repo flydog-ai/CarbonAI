@@ -8,6 +8,7 @@ import { openDatabase } from "./client.ts";
 import { runRetention } from "./retention.ts";
 import type { JobRow } from "./schema.ts";
 import { newApiKeyId, newUser } from "./users.ts";
+import { newBindingId, newChannelId } from "./channels.ts";
 import { newVisitorId, newVisitorShortId } from "./visitors.ts";
 
 function tmp(): string {
@@ -192,6 +193,48 @@ describe("visitors", () => {
     expect(after?.last_client).toBe("codex");
     expect(after?.ip).toBe("203.0.113.10");
     expect(db.visitors.listRecent(8, 10).map((v) => v.id)).toEqual([id]);
+    db.close();
+  });
+});
+
+describe("channels", () => {
+  test("upsert wechat account and bind peer to user", async () => {
+    const db = openDatabase(tmp());
+    const user = await newUser({ username: "op", password: "password1", canReply: true });
+    db.users.insert(user);
+    const id = newChannelId();
+    db.channels.upsertByKind({
+      id,
+      kind: "wechat_mp",
+      label: "WeChat MP",
+      app_id: "wxapp",
+      app_secret: "secret",
+      token: "tok",
+      aes_key: null,
+      enabled: 1,
+      created_at: 1,
+    });
+    db.channels.upsertByKind({
+      id: newChannelId(),
+      kind: "wechat_mp",
+      label: "WeChat MP",
+      app_id: "wxapp2",
+      app_secret: "secret",
+      token: "tok2",
+      aes_key: null,
+      enabled: 1,
+      created_at: 2,
+    });
+    expect(db.channels.getByKind("wechat_mp")?.app_id).toBe("wxapp2");
+    const account = db.channels.getByKind("wechat_mp")!;
+    db.channels.insertBinding({
+      id: newBindingId(),
+      account_id: account.id,
+      user_id: user.id,
+      peer_id: "openid-a",
+      created_at: 3,
+    });
+    expect(db.channels.getBindingByPeer(account.id, "openid-a")?.user_id).toBe(user.id);
     db.close();
   });
 });

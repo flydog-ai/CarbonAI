@@ -303,7 +303,7 @@ export function App() {
             <Keys t={t} connect={connect} secretFor={secretFor} rememberSecret={rememberSecret} copy={copy} flash={flash} />
           ) : null}
           {view === "users" && isAdmin ? <Users t={t} statusLabel={statusLabel} /> : null}
-          {view === "settings" && isAdmin ? <Settings t={t} flash={flash} onSite={setBrand} /> : null}
+          {view === "settings" && isAdmin ? <Settings t={t} flash={flash} onSite={setBrand} copy={copy} canDesk={canDesk} /> : null}
         </div>
       </section>
       {toast ? <div className="toast">{toast}</div> : null}
@@ -653,6 +653,7 @@ function Overview({
           </p>
         </div>
       </div>
+      {canDesk ? <WechatBind t={t} copy={copy} /> : null}
     </div>
   );
 }
@@ -1355,10 +1356,14 @@ function Settings({
   t,
   flash,
   onSite,
+  copy,
+  canDesk,
 }: {
   t: (k: string, v?: Record<string, string | number>) => string;
   flash: (msg: string) => void;
   onSite: (name: string) => void;
+  copy: (text: string, ok: string) => void;
+  canDesk: boolean;
 }) {
   const [form, setForm] = useState<SiteSettings>({
     name: "Carbon AI",
@@ -1388,6 +1393,7 @@ function Settings({
   useEffect(() => { void load(); }, []);
 
   return (
+    <div>
     <div className="card card-pad" style={{ maxWidth: 560 }}>
       <h3>{t("settings.title")}</h3>
       <p className="sub">{t("settings.sub")}</p>
@@ -1442,6 +1448,222 @@ function Settings({
         >
           {busy ? t("settings.saving") : t("settings.save")}
         </button>
+      </p>
+    </div>
+    <ChannelAdmin t={t} flash={flash} copy={copy} />
+    {canDesk ? <div style={{ marginTop: 16 }}><WechatBind t={t} copy={copy} /></div> : null}
+    </div>
+  );
+}
+
+type WechatChannel = {
+  id?: string;
+  enabled?: boolean;
+  appId?: string;
+  tokenSet?: boolean;
+  secretSet?: boolean;
+  aesSet?: boolean;
+  bound?: number;
+};
+
+function ChannelAdmin({
+  t,
+  flash,
+  copy,
+}: {
+  t: (k: string, v?: Record<string, string | number>) => string;
+  flash: (msg: string) => void;
+  copy: (text: string, ok: string) => void;
+}) {
+  const [callbackUrl, setCallbackUrl] = useState("");
+  const [httpsRequired, setHttpsRequired] = useState(false);
+  const [wechat, setWechat] = useState<WechatChannel | null>(null);
+  const [appId, setAppId] = useState("");
+  const [appSecret, setAppSecret] = useState("");
+  const [token, setToken] = useState("");
+  const [aesKey, setAesKey] = useState("");
+  const [enabled, setEnabled] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function load() {
+    const { res, body } = await api<{
+      callbackUrl?: string;
+      httpsRequired?: boolean;
+      wechat?: WechatChannel | null;
+      error?: string;
+    }>("/api/admin/channels");
+    if (!res.ok) {
+      setErr(body.error || t("err.forbidden"));
+      return;
+    }
+    setErr("");
+    setCallbackUrl(body.callbackUrl || "");
+    setHttpsRequired(Boolean(body.httpsRequired));
+    setWechat(body.wechat || null);
+    setAppId(body.wechat?.appId || "");
+    setEnabled(Boolean(body.wechat?.enabled));
+  }
+  useEffect(() => { void load(); }, []);
+
+  return (
+    <div className="card card-pad" style={{ maxWidth: 560, marginTop: 16 }}>
+      <h3>{t("channels.title")}</h3>
+      <p className="sub">{t("channels.sub")}</p>
+      <label>{t("channels.callback")}</label>
+      <p>
+        <code className="mono">{callbackUrl || "—"}</code>{" "}
+        {callbackUrl ? (
+          <button className="btn btn-secondary btn-sm" type="button" onClick={() => copy(callbackUrl, t("keys.copied"))}>
+            {t("channels.copyUrl")}
+          </button>
+        ) : null}
+      </p>
+      {httpsRequired ? <p className="err">{t("channels.httpsNeed")}</p> : null}
+      <label>{t("channels.appId")}</label>
+      <input className="mono" value={appId} onChange={(e) => setAppId(e.target.value)} />
+      <label>{t("channels.appSecret")}</label>
+      <input
+        className="mono"
+        type="password"
+        value={appSecret}
+        placeholder={wechat?.secretSet ? t("channels.secretKeep") : ""}
+        onChange={(e) => setAppSecret(e.target.value)}
+      />
+      <label>{t("channels.token")}</label>
+      <input className="mono" value={token} placeholder={wechat?.tokenSet ? t("channels.secretKeep") : ""} onChange={(e) => setToken(e.target.value)} />
+      <label>{t("channels.aes")}</label>
+      <input className="mono" value={aesKey} placeholder={wechat?.aesSet ? t("channels.secretKeep") : ""} onChange={(e) => setAesKey(e.target.value)} />
+      <p style={{ marginTop: 12 }}>
+        <label>
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> {t("channels.enable")}
+        </label>
+      </p>
+      <p className="err">{err}</p>
+      <p style={{ margin: "16px 0 0" }}>
+        <button
+          className="btn"
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setErr("");
+            const { res, body } = await api<{
+              callbackUrl?: string;
+              httpsRequired?: boolean;
+              wechat?: WechatChannel | null;
+              error?: string;
+            }>("/api/admin/channels", {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                kind: "wechat_mp",
+                appId,
+                appSecret: appSecret || undefined,
+                token: token || undefined,
+                aesKey: aesKey || undefined,
+                enabled,
+              }),
+            });
+            setBusy(false);
+            if (!res.ok) {
+              setErr(body.error || t("settings.saveFailed"));
+              return;
+            }
+            setAppSecret("");
+            setToken("");
+            setAesKey("");
+            setCallbackUrl(body.callbackUrl || callbackUrl);
+            setHttpsRequired(Boolean(body.httpsRequired));
+            setWechat(body.wechat || null);
+            setAppId(body.wechat?.appId || appId);
+            setEnabled(Boolean(body.wechat?.enabled));
+            flash(t("channels.saved"));
+          }}
+        >
+          {busy ? t("settings.saving") : t("settings.save")}
+        </button>
+      </p>
+    </div>
+  );
+}
+
+function WechatBind({
+  t,
+  copy,
+}: {
+  t: (k: string, v?: Record<string, string | number>) => string;
+  copy: (text: string, ok: string) => void;
+}) {
+  const [enabled, setEnabled] = useState(false);
+  const [bound, setBound] = useState(false);
+  const [peer, setPeer] = useState("");
+  const [code, setCode] = useState("");
+  const [err, setErr] = useState("");
+
+  async function load() {
+    const { res, body } = await api<{
+      enabled?: boolean;
+      wechat?: { bound?: boolean; peerMasked?: string };
+      error?: string;
+    }>("/api/me/channels");
+    if (!res.ok) return;
+    setEnabled(Boolean(body.enabled));
+    setBound(Boolean(body.wechat?.bound));
+    setPeer(body.wechat?.peerMasked || "");
+  }
+  useEffect(() => { void load(); }, []);
+
+  return (
+    <div className="card card-pad" style={{ maxWidth: 560, marginTop: 16 }}>
+      <h3>{t("channels.bind")}</h3>
+      <p className="sub">
+        {bound ? t("channels.bound", { peer }) : enabled ? t("channels.unbound") : t("channels.needEnable")}
+      </p>
+      {err ? <p className="err">{err}</p> : null}
+      {code ? (
+        <p>
+          <code className="mono">{code}</code>{" "}
+          <button className="btn btn-secondary btn-sm" type="button" onClick={() => copy(code, t("keys.copied"))}>
+            {t("channels.copyCode")}
+          </button>
+        </p>
+      ) : null}
+      {code ? <p className="sub">{t("channels.bindHint")}</p> : null}
+      <p style={{ margin: "12px 0 0", display: "flex", gap: 8 }}>
+        <button
+          className="btn btn-sm"
+          type="button"
+          disabled={!enabled}
+          onClick={async () => {
+            setErr("");
+            const { res, body } = await api<{ code?: string; error?: string }>("/api/me/channels/bind-code", {
+              method: "POST",
+            });
+            if (!res.ok || !body.code) {
+              setErr(body.error || t("channels.needEnable"));
+              return;
+            }
+            setCode(body.code);
+          }}
+        >
+          {t("channels.bind")}
+        </button>
+        {bound ? (
+          <button
+            className="btn btn-sm btn-secondary"
+            type="button"
+            onClick={async () => {
+              await api("/api/me/channels/unbind", { method: "POST" });
+              setBound(false);
+              setPeer("");
+              setCode("");
+              await load();
+            }}
+          >
+            {t("channels.unbind")}
+          </button>
+        ) : null}
       </p>
     </div>
   );
