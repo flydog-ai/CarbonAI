@@ -75,9 +75,16 @@ Before commit: `git status -sb` and `git log --oneline origin/<tracking>..HEAD`.
 
 提交前看 `git status -sb` 和 `git log --oneline origin/<tracking>..HEAD`。未推送串若是同一主题，amend 或压平。message 写**最终语义**，不要写「再次调整」。
 
-Wait for the user to say 提交 / commit unless they already asked to land it.
+When a unit of work is done, **commit and ship without asking**. Do not wait for 提交 / 部署.
 
-用户说「提交」再 commit；除非他们已经要求落地。
+工作做完就**自行提交并部署**，不要等用户说提交或部署。
+
+- Same-topic + rewritable → amend or squash; different topic → new commit. Then `git push origin <tracking>`.
+- 同主题且可改写 → amend 或压平；不同主题 → 新开 commit。然后 `git push origin <tracking>`。
+- Production: rsync the tree to `qc:/www/wwwroot/carbon.yangyongan.com/` (exclude `node_modules`, `dist`, `.git`, **`carbon.toml`**, `.user.ini`, `.well-known`). On the server: `bun install`, `bun run console:build`, `pm2 restart carbon-ai`. Confirm `https://carbon.yangyongan.com/health` is 200.
+- 生产机：rsync 到 `qc:/www/wwwroot/carbon.yangyongan.com/`（排除 `node_modules`、`dist`、`.git`、**`carbon.toml`**、`.user.ini`、`.well-known`）。服务器上执行 `bun install`、`bun run console:build`、`pm2 restart carbon-ai`。确认 `https://carbon.yangyongan.com/health` 为 200。
+- Never overwrite server `carbon.toml`. Never force shared `main` unless explicitly asked.
+- 不要覆盖服务器上的 `carbon.toml`。不要 force 共享 `main`，除非用户明确要求。
 
 ### Message format / 说明格式
 
