@@ -93,35 +93,26 @@ export function rememberCaller(
   opts: { protocol?: string } = {},
 ): RememberedCaller {
   const now = Date.now();
-  if (client.userId) {
-    db.users.touchLastSeen(client.userId, now);
-    return {
-      clientKeyId: client.keyId,
-      clientLabel: client.label,
-      callerLabel: client.label,
-      userId: client.userId,
-      keyPrefix: client.keyPrefix,
-    };
-  }
-  // Guest keys are tickets, not identity — a shared promo key is many people.
-  // Who it is = connecting IP + user-agent (and thus client kind).
-  // The presented key is still associated on the visitor and the job.
+  // Key owner = whose desk. Connecting client (IP + user-agent) = who is calling.
+  // Named keys are tickets too — do not label the job as the account username.
   const fp = visitorFingerprint(sight.ip, sight.userAgent);
   const existing = db.visitors.getByFingerprint(fp);
   const row = existing
     ? touchVisitor(db, existing, sight, opts.protocol)
     : createVisitor(db, sight, now, false);
   db.visitors.touch(row.id, {
-    last_seen_at: Date.now(),
+    last_seen_at: now,
     last_protocol: opts.protocol,
     last_client: sight.clientKind,
     last_key_prefix: client.keyPrefix,
   });
+  if (client.userId) db.users.touchLastSeen(client.userId, now);
   return {
-    clientKeyId: row.id,
+    clientKeyId: client.userId ? client.keyId : row.id,
     clientLabel: client.label,
     callerLabel: row.short_id,
     visitorId: row.id,
+    userId: client.userId,
     keyPrefix: client.keyPrefix ?? row.key_prefix ?? undefined,
   };
 }

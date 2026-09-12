@@ -86,7 +86,7 @@ export function listCallers(
 
   for (const u of db.users.listSeenSince(since, 80)) {
     if (!u.last_seen_at) continue;
-    if (ownerId && u.id !== ownerId) continue;
+    if (ownerId) continue;
     const liveJobs = liveByUser.get(u.id) ?? 0;
     const latest = jobs.find((j) => j.userId === u.id);
     byId.set(u.id, {
@@ -119,7 +119,7 @@ export function listCallers(
         liveJobs: liveByVisitor.get(v.id) ?? 1,
       });
     }
-    if (j.userId && !byId.has(j.userId)) {
+    if (j.userId && j.userId !== ownerId && !byId.has(j.userId)) {
       const u = db.users.getById(j.userId);
       if (!u) continue;
       byId.set(u.id, {

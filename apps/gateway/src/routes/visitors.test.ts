@@ -113,7 +113,7 @@ describe("guest visitors", () => {
         }[];
       };
       const job = listed.jobs.find((j) => j.lastUserPreview?.includes("hello site"));
-      expect(job?.callerLabel).toBe("admin");
+      expect(job?.callerLabel?.startsWith("G-")).toBe(true);
       expect(job?.clientKind).toBe("claude-code");
       expect(job?.keyPrefix?.startsWith("sk-carbon-")).toBe(true);
       expect(job?.clientIp).toBe("127.0.0.1");
@@ -124,7 +124,7 @@ describe("guest visitors", () => {
       const body = (await callers.json()) as {
         callers: { label: string; kind: string; clientKind?: string; presence: string }[];
       };
-      expect(body.callers.some((c) => c.kind === "user" && c.label === "admin" && c.clientKind === "claude-code")).toBe(true);
+      expect(body.callers.some((c) => c.kind === "guest" && c.label.startsWith("G-") && c.clientKind === "claude-code")).toBe(true);
     });
   });
 

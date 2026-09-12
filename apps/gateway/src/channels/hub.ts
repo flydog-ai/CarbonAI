@@ -32,6 +32,7 @@ import {
   textFromIlink,
   type IlinkFetch,
 } from "./weixin-ilink.ts";
+import { formatDeskLink, formatHelp, formatList, formatNotify, parseImCommand } from "./im-format.ts";
 
 const KIND = "wechat_mp";
 const KIND_BOT = "wechat_bot";
@@ -125,12 +126,7 @@ function liveJobs(engine: JobEngine, ownerId?: string, siteDeskId?: string): Job
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-function jobLine(j: JobSummary, i: number): string {
-  const who = j.callerLabel || j.clientLabel || "guest";
-  const kind = j.clientKind || "";
-  const preview = (j.lastUserPreview || "").slice(0, 80);
-  return `${i + 1}. ${who}${kind ? ` · ${kind}` : ""}\n${preview || "(no text)"}`;
-}
+
 
 export class ChannelHub {
   private readonly codes = new Map<string, BindCode>();
@@ -600,7 +596,7 @@ export class ChannelHub {
   async notify(job: JobSummary): Promise<void> {
     let text: string;
     try {
-      text = this.notifyText(job);
+      text = formatNotify(job);
     } catch {
       return;
     }
@@ -693,13 +689,8 @@ export class ChannelHub {
     }
   }
 
-  private notifyText(job: JobSummary): string {
-    const origin = this.cfg.site.publicOrigin.trim().replace(/\/$/, "");
-    const desk = origin ? `${origin}/console?view=desk` : "/console?view=desk";
-    const who = job.callerLabel || job.clientLabel || "guest";
-    const kind = job.clientKind ? ` · ${job.clientKind}` : "";
-    const preview = (job.lastUserPreview || "").slice(0, 200);
-    return `新会话 ${who}${kind}\n${preview || "(no text)"}\n回复这条消息即可作答。多条会话时先发「列表」。\n${desk}`;
+  private deskLink(): string {
+    return formatDeskLink(this.cfg.site.publicOrigin);
   }
 
   private enabledFor(userId: string, kind: string): ChannelAccountRow | null {
@@ -843,7 +834,7 @@ export class ChannelHub {
     msg: { fromUser: string; msgType: string; content: string; event: string },
   ): Promise<string | undefined> {
     if (msg.msgType === "event" && (msg.event === "subscribe" || msg.event === "scan")) {
-      return "发送绑定码（控制台连接器里复制）以绑定操作者。绑定后新会话会推到这里，直接回复即可。";
+      return "发送绑定码（控制台连接器里复制）以绑定。绑定后新会话会推到这里，直接回复即可。发 /help 看指令。";
     }
     if (msg.msgType !== "text" || !msg.content) return undefined;
     return this.handlePeerText(accountId, msg.fromUser, msg.content.trim());
@@ -858,34 +849,30 @@ export class ChannelHub {
 
     const binding = this.db.channels.getBindingByPeer(accountId, fromUser);
     if (!binding) {
-      return "尚未绑定。打开 /console 设置里的连接器，生成绑定码，发到这里。";
+      return "尚未绑定。打开控制台设置里的连接器，生成绑定码，发到这里。";
     }
     const user = this.db.users.getById(binding.user_id);
     if (!user || user.disabled || !user.can_reply) {
       return "这个绑定的账号没有回复权，或已被停用。";
     }
 
-    const lower = text.toLowerCase();
-    if (lower === "列表" || lower === "list") return this.listText(user.id);
-    if (lower === "取消" || lower === "cancel") return this.cancelLast(fromUser, user.id);
-    if (lower === "工具" || lower === "/tool") {
-      return "工具调用请在控制台 Sessions 里操作。这里只接受文字回复。";
-    }
+    const cmd = parseImCommand(text);
+    if (cmd.type === "list") return formatList(liveJobs(this.engine, user.id, this.db.users.siteDeskId()));
+    if (cmd.type === "cancel") return this.cancelLast(fromUser, user.id);
+    if (cmd.type === "help" || cmd.type === "unknown") return formatHelp();
+    if (cmd.type === "desk") return this.deskLink();
 
-    const numbered = /^(\d+)[\s.、:：]+([\s\S]+)$/.exec(text);
     const jobs = liveJobs(this.engine, user.id, this.db.users.siteDeskId());
     let job: JobSummary | undefined;
-    let body = text;
-    if (numbered) {
-      const idx = Number(numbered[1]) - 1;
-      job = jobs[idx];
-      body = numbered[2]!.trim();
+    let body = cmd.type === "reply" ? cmd.body : text;
+    if (cmd.type === "reply" && cmd.index !== undefined) {
+      job = jobs[cmd.index];
     } else if (jobs.length === 1) {
       job = jobs[0];
     } else if (jobs.length > 1) {
       const lastId = this.lastJob.get(fromUser);
       job = jobs.find((j) => j.id === lastId) ?? undefined;
-      if (!job) return `当前有 ${jobs.length} 条会话。发「列表」后用「1 回复内容」指定。`;
+      if (!job) return `当前有 ${jobs.length} 条会话。发 /list 后用 /1 内容 指定。`;
     }
     if (!job) return "现在没有等待回复的会话。";
     if (!body) return "回复内容是空的。";
@@ -921,21 +908,15 @@ export class ChannelHub {
     const acc = this.db.channels.getById(accountId);
     this.log(acc, "info", "bind", user.username);
     return `已绑定 ${user.username}。
-回复位置：用你绑定的这个连接器对话（微信 Bot / 公众号 / 飞书等），不是别人的。
-有新会话时请在这里发「列表」，然后直接打字回复。`;
-  }
-
-  private listText(ownerId: string): string {
-    const jobs = liveJobs(this.engine, ownerId, this.db.users.siteDeskId());
-    if (jobs.length === 0) return "没有等待回复的会话。";
-    return `进行中 ${jobs.length} 条：\n${jobs.map((j, i) => jobLine(j, i)).join("\n\n")}\n\n回复「1 你的回答」指定会话。`;
+回复位置：用你绑定的这个连接器对话，不是别人的。
+有新会话时直接打字回复，多条发 /list。`;
   }
 
   private async cancelLast(openid: string, userId: string): Promise<string> {
     const jobs = liveJobs(this.engine, userId, this.db.users.siteDeskId());
     const lastId = this.lastJob.get(openid);
     const job = jobs.find((j) => j.id === lastId) ?? (jobs.length === 1 ? jobs[0] : undefined);
-    if (!job) return "没有可取消的会话。发「列表」查看。";
+    if (!job) return "没有可取消的会话。发 /list 查看。";
     await this.engine.cancel(job.id, "operator");
     this.lastJob.delete(openid);
     void userId;

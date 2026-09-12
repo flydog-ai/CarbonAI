@@ -70,6 +70,16 @@ describe("rememberCaller", () => {
     expect(toml.visitorId).not.toBe(fromCli.visitorId);
     expect(toml.visitorId).not.toBe(home.id);
     expect(db.visitors.getByKeyHash(hashApiKey(home.key_plain!))?.id).toBe(home.id);
+
+    const named = rememberCaller(
+      db,
+      { label: "admin", keyId: "key_admin", userId: "usr_admin", keyPrefix: "sk-carbon-ab...xyz" },
+      sight({ userAgent: "claude-cli/1.0", clientKind: "claude-code" }),
+      { protocol: "anthropic_messages" },
+    );
+    expect(named.userId).toBe("usr_admin");
+    expect(named.callerLabel.startsWith("G-")).toBe(true);
+    expect(named.visitorId).toBe(fromCli.visitorId);
     db.close();
   });
 });
