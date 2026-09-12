@@ -3,6 +3,8 @@ import type { Config } from "@carbon-ai/config";
 import type { CarbonDb } from "@carbon-ai/db";
 import { anthropicError, listModels, openaiError } from "@carbon-ai/protocol";
 import { presentedClientKey, verifyClientKey } from "../auth/client-keys.ts";
+import { requestSight } from "../auth/sight.ts";
+import { rememberCaller } from "../auth/visitors.ts";
 
 function isAnthropic(c: { req: { header: (n: string) => string | undefined } }): boolean {
   return Boolean(c.req.header("anthropic-version"));
@@ -33,6 +35,7 @@ export function modelsRoutes(cfg: Config, db?: CarbonDb): Hono {
   const list = (c: Context) => {
     const client = requireClient(c);
     if ("error" in client) return c.json(client, 401);
+    if (db) rememberCaller(db, client, requestSight(c, cfg));
     const models = catalog();
     if (isAnthropic(c)) {
       const data = models.map((m) => ({
@@ -62,6 +65,7 @@ export function modelsRoutes(cfg: Config, db?: CarbonDb): Hono {
   const one = (c: Context) => {
     const client = requireClient(c);
     if ("error" in client) return c.json(client, 401);
+    if (db) rememberCaller(db, client, requestSight(c, cfg));
     const id = c.req.param("id");
     const found = catalog().find((m) => m.id === id);
     const display = found?.displayName ?? cfg.models.defaultDisplay;

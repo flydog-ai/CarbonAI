@@ -31,7 +31,11 @@ CREATE TABLE IF NOT EXISTS jobs (
   thread_id     TEXT,
   turn_count    INTEGER,
   last_user_preview TEXT,
-  deleted_at    INTEGER
+  deleted_at    INTEGER,
+  visitor_id    TEXT,
+  client_kind   TEXT,
+  client_ip     TEXT,
+  caller_label  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS blobs (
@@ -53,7 +57,8 @@ CREATE TABLE IF NOT EXISTS users (
   role          TEXT NOT NULL DEFAULT 'user',
   can_reply     INTEGER NOT NULL DEFAULT 0,
   disabled      INTEGER NOT NULL DEFAULT 0,
-  created_at    INTEGER NOT NULL
+  created_at    INTEGER NOT NULL,
+  last_seen_at  INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS api_keys (
@@ -84,6 +89,24 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires_at);
+
+CREATE TABLE IF NOT EXISTS visitors (
+  id            TEXT PRIMARY KEY,
+  short_id      TEXT NOT NULL UNIQUE,
+  fingerprint   TEXT NOT NULL,
+  key_hash      TEXT UNIQUE,
+  key_prefix    TEXT,
+  key_plain     TEXT,
+  ip            TEXT,
+  user_agent    TEXT,
+  last_client   TEXT,
+  last_protocol TEXT,
+  last_seen_at  INTEGER NOT NULL,
+  created_at    INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS visitors_fingerprint ON visitors(fingerprint);
+CREATE INDEX IF NOT EXISTS visitors_seen ON visitors(last_seen_at);
 `;
 
 export type JobRow = {
@@ -114,6 +137,10 @@ export type JobRow = {
   turn_count: number | null;
   last_user_preview: string | null;
   deleted_at: number | null;
+  visitor_id: string | null;
+  client_kind: string | null;
+  client_ip: string | null;
+  caller_label: string | null;
 };
 
 export type BlobRow = {
@@ -133,6 +160,7 @@ export type UserRow = {
   can_reply: number;
   disabled: number;
   created_at: number;
+  last_seen_at: number | null;
 };
 
 export type ApiKeyRow = {
@@ -151,4 +179,19 @@ export type SessionRow = {
   user_id: string;
   created_at: number;
   expires_at: number;
+};
+
+export type VisitorRow = {
+  id: string;
+  short_id: string;
+  fingerprint: string;
+  key_hash: string | null;
+  key_prefix: string | null;
+  key_plain: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  last_client: string | null;
+  last_protocol: string | null;
+  last_seen_at: number;
+  created_at: number;
 };

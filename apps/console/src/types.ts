@@ -40,6 +40,8 @@ export type SiteSettings = {
 
 export type GuestKey = { label: string; prefix: string };
 
+export type Presence = "live" | "online" | "idle";
+
 export type Job = {
   id: string;
   threadId?: string;
@@ -47,10 +49,31 @@ export type Job = {
   model?: string;
   displayModel?: string;
   clientLabel?: string;
+  callerLabel?: string;
+  clientKind?: string;
+  clientIp?: string;
   lastUserPreview?: string;
   waitMs?: number;
   turnCount?: number;
   createdAt: number;
+  lastSeenAt?: number;
+  presence?: Presence;
+  keyPrefix?: string;
+  visitorId?: string;
+  userId?: string;
+};
+
+export type Caller = {
+  id: string;
+  kind: "user" | "guest";
+  label: string;
+  clientKind?: string;
+  clientKindLabel?: string;
+  clientIp?: string;
+  keyPrefix?: string;
+  lastSeenAt: number;
+  presence: Presence;
+  liveJobs: number;
 };
 
 export type ContextBlock = {

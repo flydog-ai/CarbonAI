@@ -6,6 +6,7 @@ export type ClientIdentity = {
   label: string;
   keyId: string;
   userId?: string;
+  visitorId?: string;
 };
 
 function sha256(value: string): Buffer {
@@ -56,6 +57,10 @@ export function verifyClientKey(
         }
       }
       return undefined;
+    }
+    const visitor = db.visitors.getByKeyHash(presentedHash.toString("hex"));
+    if (visitor) {
+      return { label: visitor.short_id, keyId: visitor.id, visitorId: visitor.id };
     }
   }
   const keys = cfg.auth.apiKeys.filter((k) => k.key.length > 0);

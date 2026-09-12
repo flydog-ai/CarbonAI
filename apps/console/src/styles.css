@@ -280,9 +280,14 @@ textarea { min-height: 108px; resize: vertical; }
 .conv-top b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conv-top time { font-size: 11px; color: var(--muted); flex-shrink: 0; }
 .conv-prev { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv-kind { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conv-dot {
   width: 8px; height: 8px; border-radius: 99px; background: var(--live);
   box-shadow: 0 0 0 3px var(--live-bg);
+}
+.conv-dot.online {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px var(--ok-bg);
 }
 .pill {
   display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;

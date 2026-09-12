@@ -38,6 +38,10 @@ export type CreateJobInput = {
   clientKeyId?: string;
   clientLabel?: string;
   userId?: string;
+  visitorId?: string;
+  clientKind?: string;
+  clientIp?: string;
+  callerLabel?: string;
   adapter?: ProtocolAdapter;
 };
 
@@ -58,8 +62,15 @@ export type JobSummary = {
   claimedBy?: string;
   looksLikeRetryOf?: string;
   userId?: string;
+  visitorId?: string;
+  callerLabel?: string;
+  clientKind?: string;
+  clientIp?: string;
   threadId?: string;
   turnCount?: number;
+  lastSeenAt?: number;
+  presence?: "live" | "online" | "idle";
+  keyPrefix?: string;
 };
 
 type TerminalState = { status: "completed" | "cancelled" | "failed"; error?: string; code?: string };
@@ -93,6 +104,10 @@ type Runtime = {
   claimedAt?: number;
   looksLikeRetryOf?: string;
   userId?: string;
+  visitorId?: string;
+  callerLabel?: string;
+  clientKind?: string;
+  clientIp?: string;
   threadId: string;
   turnCount: number;
   deletedAt?: number;
@@ -187,7 +202,7 @@ export class JobEngine {
       }
 
       const clientKeyId = input.clientKeyId ?? "debug";
-      const parent = this.findThreadParent(clientKeyId, normalized);
+      const parent = this.findThreadParent(clientKeyId, normalized, input.visitorId);
       const threadId = parent?.threadId ?? ids.thread();
       const turnCount = Math.max(1, conversationTurns(normalized).length);
       const preview = lastUserPreview(normalized);
@@ -219,6 +234,10 @@ export class JobEngine {
         outputTokens: 0,
         looksLikeRetryOf: prior && prior.id !== id ? prior.id : undefined,
         userId: input.userId,
+        visitorId: input.visitorId,
+        callerLabel: input.callerLabel,
+        clientKind: input.clientKind,
+        clientIp: input.clientIp,
         threadId,
         turnCount,
         adapter: input.adapter ?? new TestAdapter(),
@@ -258,6 +277,10 @@ export class JobEngine {
         turn_count: turnCount,
         last_user_preview: preview || null,
         deleted_at: null,
+        visitor_id: input.visitorId ?? null,
+        client_kind: input.clientKind ?? null,
+        client_ip: input.clientIp ?? null,
+        caller_label: input.callerLabel ?? null,
       });
       this.jobs.set(id, rt);
       return this.summary(rt);
@@ -521,15 +544,21 @@ export class JobEngine {
   private findThreadParent(
     clientKeyId: string,
     next: NormalizedRequest,
+    visitorId?: string,
   ): { threadId: string } | undefined {
     type Cand = { createdAt: number; prefix: number; threadId: string; request: NormalizedRequest };
     const candidates: Cand[] = [];
+    const sameCaller = (j: { clientKeyId: string; visitorId?: string }): boolean => {
+      if (visitorId) return j.visitorId === visitorId;
+      return j.clientKeyId === clientKeyId;
+    };
     for (const j of this.jobs.values()) {
-      if (j.clientKeyId !== clientKeyId) continue;
+      if (!sameCaller(j)) continue;
       candidates.push({ createdAt: j.createdAt, prefix: 0, threadId: j.threadId, request: j.request });
     }
     for (const row of this.db.listRecentByClient(clientKeyId, 40)) {
       if (this.jobs.has(row.id) || !row.normalized_json || !row.thread_id) continue;
+      if (visitorId && row.visitor_id !== visitorId) continue;
       try {
         const request = JSON.parse(row.normalized_json) as NormalizedRequest;
         candidates.push({
@@ -569,6 +598,10 @@ export class JobEngine {
       lastUserPreview: row.last_user_preview ?? "",
       requestHash: row.request_hash,
       userId: undefined,
+      visitorId: row.visitor_id ?? undefined,
+      callerLabel: row.caller_label ?? undefined,
+      clientKind: row.client_kind ?? undefined,
+      clientIp: row.client_ip ?? undefined,
       threadId: row.thread_id,
       turnCount: row.turn_count ?? 1,
     };
@@ -607,6 +640,7 @@ export class JobEngine {
     if (!rt || !rt.writer || !LIVE.includes(rt.status)) return;
     try {
       await rt.adapter.heartbeat(this.ctx(rt));
+      this.touchCaller(rt);
     } catch {
       await this.cancel(jobId, "write_fail");
     }
@@ -629,6 +663,12 @@ export class JobEngine {
     });
     rt.resolveAttached();
     rt.resolveTerminal(state);
+  }
+
+  private touchCaller(rt: Runtime): void {
+    const now = this.now();
+    if (rt.visitorId) this.db.visitors.touch(rt.visitorId, { last_seen_at: now });
+    if (rt.userId) this.db.users.touchLastSeen(rt.userId, now);
   }
 
   private persistStatus(rt: Runtime): void {
@@ -693,6 +733,10 @@ export class JobEngine {
       claimedBy: rt.claimedBy,
       looksLikeRetryOf: rt.looksLikeRetryOf,
       userId: rt.userId,
+      visitorId: rt.visitorId,
+      callerLabel: rt.callerLabel,
+      clientKind: rt.clientKind,
+      clientIp: rt.clientIp,
       threadId: rt.threadId,
       turnCount: rt.turnCount,
     };

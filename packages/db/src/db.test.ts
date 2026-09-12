@@ -8,6 +8,7 @@ import { openDatabase } from "./client.ts";
 import { runRetention } from "./retention.ts";
 import type { JobRow } from "./schema.ts";
 import { newApiKeyId, newUser } from "./users.ts";
+import { newVisitorId, newVisitorShortId } from "./visitors.ts";
 
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), "carbon-db-"));
@@ -42,6 +43,10 @@ function baseJob(over: Partial<JobRow> = {}): JobRow {
     turn_count: null,
     last_user_preview: null,
     deleted_at: null,
+    visitor_id: null,
+    client_kind: null,
+    client_ip: null,
+    caller_label: null,
     ...over,
   };
 }
@@ -153,6 +158,40 @@ describe("CarbonDb", () => {
     expect(db.sessions.get("sess_live")).not.toBeNull();
     expect(db.sessions.deleteByUser(user.id)).toBe(1);
     expect(db.sessions.get("sess_live")).toBeNull();
+    db.close();
+  });
+});
+
+describe("visitors", () => {
+  test("persist guest identity, key lookup, and last seen", () => {
+    const db = openDatabase(tmp());
+    const id = newVisitorId();
+    const short = newVisitorShortId();
+    expect(short.startsWith("G-")).toBe(true);
+    expect(short.length).toBe(7);
+    db.visitors.insert({
+      id,
+      short_id: short,
+      fingerprint: "fp-1",
+      key_hash: "hash-1",
+      key_prefix: "sk-carbon-ab...xyz",
+      key_plain: "sk-carbon-guest",
+      ip: "203.0.113.9",
+      user_agent: "claude-cli/1.0",
+      last_client: "claude-code",
+      last_protocol: "anthropic_messages",
+      last_seen_at: 1,
+      created_at: 1,
+    });
+    expect(db.visitors.getById(id)?.short_id).toBe(short);
+    expect(db.visitors.getByKeyHash("hash-1")?.id).toBe(id);
+    expect(db.visitors.getByFingerprint("fp-1")?.ip).toBe("203.0.113.9");
+    db.visitors.touch(id, { last_seen_at: 9, last_client: "codex", ip: "203.0.113.10" });
+    const after = db.visitors.getById(id);
+    expect(after?.last_seen_at).toBe(9);
+    expect(after?.last_client).toBe("codex");
+    expect(after?.ip).toBe("203.0.113.10");
+    expect(db.visitors.listRecent(8, 10).map((v) => v.id)).toEqual([id]);
     db.close();
   });
 });

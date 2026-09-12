@@ -150,8 +150,8 @@ Do not skip the suite to land a change. If a test is wrong, fix the test.
 
 ## Security / 安全
 
-- Toml `[[auth.api_keys]]` (`sk-carbon-local`) is the **local guest key** for agents (homepage Import). Account passwords open `/console`. Do not mix them. Neither belongs in git, screenshots of secrets, or public issues.
-- toml `[[auth.api_keys]]`（`sk-carbon-local`）是给智能体的**本地匿名 key**（首页 Import）。账号密码打开 `/console`。不要混用。都不要进 git、密钥截图或公开 issue。
+- Toml `[[auth.api_keys]]` (`sk-carbon-local`) is the **local guest key** fallback. With a database, homepage Import mints a **per-browser guest key** (httpOnly cookie `carbon_vid`, `visitors` row, short id `G-xxxxx`). Account passwords open `/console`. Do not mix them. Neither belongs in git, screenshots of secrets, or public issues.
+- toml `[[auth.api_keys]]`（`sk-carbon-local`）是**本地匿名 key 兜底**。有数据库时，首页导入签发**按浏览器的匿名 key**（httpOnly cookie `carbon_vid`，`visitors` 行，短号 `G-xxxxx`）。账号密码打开 `/console`。不要混用。都不要进 git、密钥截图或公开 issue。
 - Loopback by default. Do not bind `0.0.0.0` unless the user asks, and then origin checks are mandatory.
 - 默认 loopback。不要绑 `0.0.0.0`，除非用户要求；绑了就必须校验 Origin。
 

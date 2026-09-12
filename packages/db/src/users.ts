@@ -16,10 +16,19 @@ export class UserRepo {
   insert(row: UserRow): void {
     this.sqlite
       .query(
-        `INSERT INTO users (id, username, password_hash, role, can_reply, disabled, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO users (id, username, password_hash, role, can_reply, disabled, created_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(row.id, row.username, row.password_hash, row.role, row.can_reply, row.disabled, row.created_at);
+      .run(
+        row.id,
+        row.username,
+        row.password_hash,
+        row.role,
+        row.can_reply,
+        row.disabled,
+        row.created_at,
+        row.last_seen_at ?? null,
+      );
   }
 
   getById(id: string): UserRow | null {
@@ -77,6 +86,18 @@ export class UserRepo {
   deleteKey(id: string): void {
     this.sqlite.query("DELETE FROM api_keys WHERE id = ?").run(id);
   }
+
+  touchLastSeen(id: string, at: number): void {
+    this.sqlite.query("UPDATE users SET last_seen_at = ? WHERE id = ?").run(at, id);
+  }
+
+  listSeenSince(since: number, limit = 50): UserRow[] {
+    return this.sqlite
+      .query(
+        "SELECT * FROM users WHERE last_seen_at IS NOT NULL AND last_seen_at >= ? ORDER BY last_seen_at DESC LIMIT ?",
+      )
+      .all(since, limit) as UserRow[];
+  }
 }
 
 export async function newUser(opts: {
@@ -93,6 +114,7 @@ export async function newUser(opts: {
     can_reply: opts.canReply ? 1 : 0,
     disabled: 0,
     created_at: Date.now(),
+    last_seen_at: null,
   };
 }
 

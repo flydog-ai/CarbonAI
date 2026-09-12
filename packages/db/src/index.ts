@@ -4,4 +4,5 @@ export { runRetention } from "./retention.ts";
 export { UserRepo, newApiKeyId, newUser } from "./users.ts";
 export { SessionRepo } from "./sessions.ts";
 export { SettingsRepo } from "./settings.ts";
-export type { ApiKeyRow, BlobRow, JobRow, SessionRow, UserRole, UserRow } from "./schema.ts";
+export { VisitorRepo, newVisitorId, newVisitorShortId } from "./visitors.ts";
+export type { ApiKeyRow, BlobRow, JobRow, SessionRow, UserRole, UserRow, VisitorRow } from "./schema.ts";

@@ -1,6 +1,8 @@
 import type { BindHost } from "@carbon-ai/config";
 
-export type FetchHandler = (req: Request) => Response | Promise<Response>;
+export type FetchEnv = { remoteAddress?: string };
+
+export type FetchHandler = (req: Request, env?: FetchEnv) => Response | Promise<Response>;
 
 export type ListenHandle = {
   port: number;
@@ -29,7 +31,10 @@ function serveOne(
   return Bun.serve({
     hostname,
     port,
-    fetch,
+    fetch: (req, server) => {
+      const ip = server.requestIP(req)?.address ?? "";
+      return fetch(req, { remoteAddress: ip });
+    },
     idleTimeout,
     maxRequestBodySize,
   });

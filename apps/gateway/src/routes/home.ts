@@ -1,8 +1,11 @@
 import { Hono } from "hono";
+import { getCookie, setCookie } from "hono/cookie";
 import { join } from "node:path";
 import type { Config } from "@carbon-ai/config";
 import type { CarbonDb } from "@carbon-ai/db";
 import { claudeModelSlots } from "@carbon-ai/protocol";
+import { requestSight } from "../auth/sight.ts";
+import { issueHomepageVisitor, VISITOR_COOKIE, VISITOR_COOKIE_TTL_SEC } from "../auth/visitors.ts";
 import {
   buildCcSwitchClaudeImportHref,
   clientApiKey,
@@ -32,7 +35,21 @@ export function homeRoutes(cfg: Config, db?: CarbonDb): Hono {
   app.get("/", (c) => {
     const endpoint = siteOrigin(cfg, c.req.url);
     const hasUsers = Boolean(db && db.users.count() > 0);
-    const apiKey = clientApiKey(cfg, hasUsers);
+    let apiKey = clientApiKey(cfg, hasUsers);
+    let visitorKey = false;
+    if (db) {
+      const visitor = issueHomepageVisitor(db, requestSight(c, cfg), getCookie(c, VISITOR_COOKIE));
+      setCookie(c, VISITOR_COOKIE, visitor.id, {
+        httpOnly: true,
+        path: "/",
+        sameSite: "Lax",
+        maxAge: VISITOR_COOKIE_TTL_SEC,
+      });
+      if (visitor.key_plain) {
+        apiKey = visitor.key_plain;
+        visitorKey = true;
+      }
+    }
     const displayName = cfg.models.defaultDisplay || cfg.site.name || "Carbon AI";
     const slots = claudeModelSlots({
       defaultId: cfg.models.defaultId,
@@ -45,7 +62,9 @@ export function homeRoutes(cfg: Config, db?: CarbonDb): Hono {
           apiKey,
           homepage: endpoint,
           ...slots,
-          notes: "Carbon AI local guest key. ANTHROPIC_BASE_URL has no /v1. Use a claude-* model id.",
+          notes: visitorKey
+            ? "Carbon AI guest key for this browser. ANTHROPIC_BASE_URL has no /v1. Use a claude-* model id."
+            : "Carbon AI local guest key. ANTHROPIC_BASE_URL has no /v1. Use a claude-* model id.",
         })
       : "";
     return c.html(
@@ -57,6 +76,7 @@ export function homeRoutes(cfg: Config, db?: CarbonDb): Hono {
         siteNameZh: cfg.site.nameZh,
         model: slots.model,
         apiKey: apiKey ?? "",
+        visitorKey,
       }),
     );
   });

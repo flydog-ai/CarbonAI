@@ -20,6 +20,8 @@ import {
 } from "@carbon-ai/protocol";
 import type { CarbonDb } from "@carbon-ai/db";
 import { presentedClientKey, verifyClientKey } from "../auth/client-keys.ts";
+import { requestSight } from "../auth/sight.ts";
+import { rememberCaller } from "../auth/visitors.ts";
 import { openSse } from "../http/sse-pipe.ts";
 import { readBytesCapped } from "../http/read-json-capped.ts";
 import { JobEngine } from "../job/engine.ts";
@@ -153,6 +155,8 @@ export function vendorRoutes(cfg: Config, engine: JobEngine, db?: CarbonDb): Hon
         }
         stitchPrevious(engine, normalized, prior.id);
       }
+      const sight = requestSight(c, cfg, { protocol });
+      const caller = db ? rememberCaller(db, client, sight, { protocol }) : undefined;
       const summary = await engine.create({
         protocol,
         model: normalized.model,
@@ -161,9 +165,13 @@ export function vendorRoutes(cfg: Config, engine: JobEngine, db?: CarbonDb): Hon
         headers: headersOf(c.req.raw),
         normalized,
         adapter: adapterFor(protocol),
-        clientKeyId: client.keyId,
-        clientLabel: client.label,
+        clientKeyId: caller?.clientKeyId ?? client.keyId,
+        clientLabel: caller?.clientLabel ?? client.label,
         userId: client.userId,
+        visitorId: caller?.visitorId,
+        callerLabel: caller?.callerLabel,
+        clientKind: sight.clientKind,
+        clientIp: sight.ip,
       });
       console.log(
         `job ${summary.id} ${normalized.stream ? "streaming" : "json"} ${protocol} model=${normalized.model} — complete: POST /debug/jobs/${summary.id}/complete`,

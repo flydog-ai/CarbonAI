@@ -13,6 +13,14 @@ export function isLive(j: Job): boolean {
   return j.status === "pending" || j.status === "claimed" || j.status === "streaming";
 }
 
+export function callerTitle(j: Pick<Job, "callerLabel" | "clientLabel" | "displayModel" | "model">, fallback: string): string {
+  return j.callerLabel || j.clientLabel || j.displayModel || j.model || fallback;
+}
+
+export function isPresent(j: Job): boolean {
+  return isLive(j) || j.presence === "live" || j.presence === "online";
+}
+
 export function threadKey(j: { id: string; threadId?: string }): string {
   return j.threadId || j.id;
 }

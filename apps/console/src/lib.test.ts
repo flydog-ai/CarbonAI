@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { filterTools, formatParams, groupThreads, initials, isLive, secretPrefix, threadKey } from "./lib.ts";
+import { callerTitle, filterTools, formatParams, groupThreads, initials, isLive, secretPrefix, threadKey } from "./lib.ts";
 import type { PublicTool } from "./types.ts";
 import type { Job } from "./types.ts";
 
@@ -34,6 +34,11 @@ describe("thread grouping", () => {
     expect(initials("claude")).toBe("C");
     expect(initials("碳基")).toBe("碳");
     expect(initials("")).toBe("?");
+  });
+
+  test("callerTitle prefers the guest id", () => {
+    expect(callerTitle({ callerLabel: "G-7K3M", clientLabel: "Claude Code" }, "Client")).toBe("G-7K3M");
+    expect(callerTitle({ clientLabel: "alice" }, "Client")).toBe("alice");
   });
 });
 

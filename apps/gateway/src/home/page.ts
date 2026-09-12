@@ -6,6 +6,7 @@ export type HomePageData = {
   siteNameZh?: string;
   model: string;
   apiKey: string;
+  visitorKey?: boolean;
 };
 
 function escapeHtml(value: string): string {
@@ -27,6 +28,7 @@ export function renderHomePage(data: HomePageData): string {
   const apiKey = escapeHtml(data.apiKey);
   const hasKey = Boolean(data.apiKey);
   const hasImport = Boolean(data.href);
+  const visitorKey = Boolean(data.visitorKey);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -201,6 +203,8 @@ export function renderHomePage(data: HomePageData): string {
     }
     .loop .ok { color: var(--ok); } .loop .wait { color: var(--primary); } .loop .cmd { color: #7eb8e8; }
     .hint { margin: 12px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .panel-actions { margin-top: 14px; }
+    .panel-actions .btn { width: 100%; }
     .pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; max-width: 1120px; margin: 0 auto 36px; }
     .pill {
       display: inline-flex; align-items: center; gap: 8px;
@@ -274,12 +278,7 @@ export function renderHomePage(data: HomePageData): string {
           <h1>${siteName}</h1>
           <p class="lede" data-i18n="lede">No LLM behind this gateway. Agents send a request; a person on this machine reads the context and replies. Compatible clients see a normal model endpoint.</p>
           <div class="cta-row">
-            ${
-              hasImport
-                ? `<a class="btn btn-primary" id="cc-switch-import" href="${href}" data-i18n="cta.import">Import into Claude Code</a>`
-                : ""
-            }
-            <a class="btn ${hasImport ? "btn-secondary" : "btn-primary"}" href="/console" data-i18n="cta.console">Open console</a>
+            <a class="btn btn-primary" href="/console" data-i18n="cta.console">Open console</a>
           </div>
         </div>
         <aside class="panel" aria-label="Guest key">
@@ -309,8 +308,15 @@ export function renderHomePage(data: HomePageData): string {
               <div class="ok" data-i18n="loop.ok">operator replies → stream completes</div>
             </div>
             ${
+              hasImport
+                ? `<div class="panel-actions"><a class="btn btn-primary" id="cc-switch-import" href="${href}" data-i18n="cta.import">Import into Claude Code</a></div>`
+                : ""
+            }
+            ${
               hasKey
-                ? `<p class="hint" data-i18n="hint.guest">This import uses the local guest key from carbon.toml. No account. Anyone with the key can open jobs on this gateway.</p>`
+                ? visitorKey
+                  ? `<p class="hint" data-i18n="hint.visitor">This import uses a guest key for this browser. No account. The operator sees a guest id, not your name.</p>`
+                  : `<p class="hint" data-i18n="hint.guest">This import uses the local guest key from carbon.toml. No account. Anyone with the key can open jobs on this gateway.</p>`
                 : `<p class="hint" data-i18n="hint.nokey">No local guest key in carbon.toml. Sign in at /console and mint a user key.</p>`
             }
             <p class="hint" data-i18n="hint.cc">If Import does nothing, copy Base / Key / Model by hand. One URL and one key; /v1 is optional.</p>
@@ -371,6 +377,7 @@ export function renderHomePage(data: HomePageData): string {
         "loop.wait": "SSE hanging — waiting for a human",
         "loop.ok": "operator replies → stream completes",
         "hint.guest": "This import uses the local guest key from carbon.toml. No account. Anyone with the key can open jobs on this gateway.",
+        "hint.visitor": "This import uses a guest key for this browser. No account. The operator sees a guest id, not your name.",
         "hint.nokey": "No local guest key in carbon.toml. Sign in at /console and mint a user key.",
         "hint.cc": "If Import does nothing, copy Base / Key / Model by hand. One URL and one key; /v1 is optional.",
         "pill.hang": "Hangs until a person replies",
@@ -405,6 +412,7 @@ export function renderHomePage(data: HomePageData): string {
         "loop.wait": "SSE 挂起 — 等人回复",
         "loop.ok": "操作者回复 → 流结束",
         "hint.guest": "这一键导入用的是 carbon.toml 里的本地匿名密钥，不用登录。拿到这把 key 就能往本机网关丢任务。",
+        "hint.visitor": "这一键导入用的是这台浏览器的匿名密钥，不用登录。操作者看到的是访客编号，不是你的名字。",
         "hint.nokey": "toml 里没有本地匿名密钥。到 /console 登录并签发用户密钥。",
         "hint.cc": "点了没反应：请手动抄地址、密钥、模型。一个地址一把密钥，/v1 可有可无。",
         "pill.hang": "一直挂到有人回复",

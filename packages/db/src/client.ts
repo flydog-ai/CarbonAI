@@ -5,6 +5,7 @@ import { SCHEMA_SQL, type BlobRow, type JobRow } from "./schema.ts";
 import { SessionRepo } from "./sessions.ts";
 import { SettingsRepo } from "./settings.ts";
 import { UserRepo } from "./users.ts";
+import { VisitorRepo } from "./visitors.ts";
 
 const RAW_INLINE_LIMIT = 1024 * 1024;
 
@@ -15,6 +16,7 @@ export class CarbonDb {
   readonly users: UserRepo;
   readonly settings: SettingsRepo;
   readonly sessions: SessionRepo;
+  readonly visitors: VisitorRepo;
 
   constructor(
     readonly sqlite: Database,
@@ -26,6 +28,7 @@ export class CarbonDb {
     this.users = new UserRepo(sqlite);
     this.settings = new SettingsRepo(sqlite);
     this.sessions = new SessionRepo(sqlite);
+    this.visitors = new VisitorRepo(sqlite);
     mkdirSync(this.blobDir, { recursive: true, mode: 0o700 });
   }
 
@@ -41,8 +44,9 @@ export class CarbonDb {
           request_hash, request_path, request_json, headers_json, normalized_json,
           response_json, events_json, claimed_by, claimed_at, error_json,
           input_tokens, output_tokens, created_at, started_at, finished_at,
-          thread_id, turn_count, last_user_preview, deleted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          thread_id, turn_count, last_user_preview, deleted_at,
+          visitor_id, client_kind, client_ip, caller_label
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         row.id,
@@ -72,6 +76,10 @@ export class CarbonDb {
         row.turn_count,
         row.last_user_preview,
         row.deleted_at ?? null,
+        row.visitor_id ?? null,
+        row.client_kind ?? null,
+        row.client_ip ?? null,
+        row.caller_label ?? null,
       );
   }
 
@@ -188,6 +196,11 @@ export function openDatabase(dataDir: string): CarbonDb {
   ensureColumn(sqlite, "jobs", "turn_count", "INTEGER");
   ensureColumn(sqlite, "jobs", "last_user_preview", "TEXT");
   ensureColumn(sqlite, "jobs", "deleted_at", "INTEGER");
+  ensureColumn(sqlite, "jobs", "visitor_id", "TEXT");
+  ensureColumn(sqlite, "jobs", "client_kind", "TEXT");
+  ensureColumn(sqlite, "jobs", "client_ip", "TEXT");
+  ensureColumn(sqlite, "jobs", "caller_label", "TEXT");
+  ensureColumn(sqlite, "users", "last_seen_at", "INTEGER");
   return new CarbonDb(sqlite, dataDir);
 }
 

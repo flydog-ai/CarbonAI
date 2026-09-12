@@ -16,12 +16,12 @@ import {
   ThemeSwitch,
 } from "./components.tsx";
 import { detectLang, translate } from "./i18n.ts";
-import { copyText, filterTools, formatParams, fmtWhen, groupThreads, initials, isLive, readView, secretPrefix, setViewUrl, threadKey } from "./lib.ts";
+import { callerTitle, copyText, filterTools, formatParams, fmtWhen, groupThreads, initials, isLive, isPresent, readView, secretPrefix, setViewUrl, threadKey } from "./lib.ts";
 import { ChatItem } from "./ChatItem.tsx";
 import { pendingFromTool, ToolDraftCard, type PendingTool } from "./ToolDraft.tsx";
 import { Mark } from "./brand/Mark.tsx";
 import { applyTheme, detectTheme, persistTheme, themeIsLocked } from "./theme.ts";
-import type { ApiKey, ConnectInfo, ContextBlock, ContextPage, GuestKey, Job, Lang, PublicTool, SiteSettings, Theme, User, View } from "./types.ts";
+import type { ApiKey, Caller, ConnectInfo, ContextBlock, ContextPage, GuestKey, Job, Lang, PublicTool, SiteSettings, Theme, User, View } from "./types.ts";
 
 type Gate = "boot" | "setup" | "login" | "app";
 
@@ -458,6 +458,26 @@ function Login({
   );
 }
 
+function kindLabel(t: (k: string, v?: Record<string, string | number>) => string, kind?: string): string {
+  if (!kind) return "";
+  const key = `client.${kind}`;
+  const label = t(key);
+  return label === key ? kind : label;
+}
+
+function sessionMeta(
+  t: (k: string, v?: Record<string, string | number>) => string,
+  j: Job | null,
+): string {
+  if (!j) return "";
+  const parts = [kindLabel(t, j.clientKind), j.clientIp].filter(Boolean);
+  if (isLive(j) || j.presence === "live") parts.push(t("desk.waiting"));
+  else if (j.presence === "online") parts.push(t("desk.online"));
+  else if (j.lastSeenAt) parts.push(t("desk.lastSeen", { when: fmtWhen(j.lastSeenAt, t) }));
+  if (j.turnCount && j.turnCount > 1) parts.push(t("desk.turns", { n: j.turnCount }));
+  return parts.join(" · ");
+}
+
 function Overview({
   t,
   isAdmin,
@@ -482,6 +502,7 @@ function Overview({
   const [users, setUsers] = useState<User[]>([]);
   const [guest, setGuest] = useState<GuestKey[]>([]);
   const [guestLoaded, setGuestLoaded] = useState(false);
+  const [callers, setCallers] = useState<Caller[]>([]);
 
   useEffect(() => {
     void (async () => {
@@ -490,6 +511,8 @@ function Overview({
       if (canDesk) {
         const j = await api<{ jobs?: Job[] }>("/api/operator/jobs");
         if (j.res.ok) setJobs(j.body.jobs || []);
+        const c = await api<{ callers?: Caller[] }>("/api/operator/callers");
+        if (c.res.ok) setCallers(c.body.callers || []);
       }
       if (isAdmin) {
         const u = await api<{ users?: User[] }>("/api/admin/users");
@@ -503,6 +526,7 @@ function Overview({
 
   const live = groupThreads(jobs).filter(isLive);
   const activeKeys = keys;
+  const onlineN = callers.filter((c) => c.presence === "live" || c.presence === "online").length;
 
   return (
     <div>
@@ -511,15 +535,15 @@ function Overview({
           <>
             <Stat k={t("home.statUsers")} v={users.length} h={t("home.statUsersHint")} />
             <Stat k={t("home.statLive")} v={canDesk ? live.length : "—"} h={canDesk ? t("home.statLiveHint") : t("home.statLiveNeed")} />
-            <Stat k={t("home.statYourKeys")} v={activeKeys.length} h={t("home.statYourKeysAdmin")} />
+            <Stat k={t("home.statOnline")} v={canDesk ? onlineN : "—"} h={t("home.statOnlineHint")} />
             <Stat k={t("home.statGuest")} v={guest[0]?.prefix || t("home.guestUnset")} h={t("home.statGuestHint")} />
           </>
         ) : (
           <>
             <Stat k={t("home.statYourKeys")} v={activeKeys.length} h={t("home.statYourKeysUser")} />
             <Stat k={t("home.sessions")} v={canDesk ? live.length : t("home.sessionsOff")} h={canDesk ? t("home.liveThreads") : t("home.noReply")} />
+            <Stat k={t("home.statOnline")} v={canDesk ? onlineN : "—"} h={t("home.statOnlineHint")} />
             <Stat k={t("home.role")} v={t(`role.${user.role}`)} />
-            <Stat k={t("home.apiKeys")} v={keys.length} />
           </>
         )}
       </div>
@@ -576,20 +600,38 @@ function Overview({
         <div className="card card-pad">
           <h3>{canDesk ? t("home.liveSessions") : t("home.apiKeys")}</h3>
           {canDesk ? (
-            live.length ? (
-              <table>
-                <tbody>
-                  {live.slice(0, 6).map((j) => (
-                    <tr key={j.id}>
-                      <td><Pill status={j.status} label={statusLabel(j.status)} /></td>
-                      <td>{j.lastUserPreview || t("desk.noUserText")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="empty">{t("home.noLive")}</p>
-            )
+            <>
+              {live.length ? (
+                <table>
+                  <tbody>
+                    {live.slice(0, 6).map((j) => (
+                      <tr key={j.id}>
+                        <td><Pill status={j.status} label={statusLabel(j.status)} /></td>
+                        <td>{callerTitle(j, t("desk.client"))}</td>
+                        <td>{kindLabel(t, j.clientKind)}</td>
+                        <td>{j.lastUserPreview || t("desk.noUserText")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="empty">{t("home.noLive")}</p>
+              )}
+              {callers.length ? (
+                <table style={{ marginTop: 12 }}>
+                  <tbody>
+                    {callers.slice(0, 6).map((c) => (
+                      <tr key={c.id}>
+                        <td><Pill status={c.presence === "idle" ? "off" : "streaming"} label={c.presence === "idle" ? t("desk.idle") : t("desk.online")} /></td>
+                        <td>{c.label}</td>
+                        <td>{c.clientKindLabel || kindLabel(t, c.clientKind)}</td>
+                        <td className="mono">{c.clientIp || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : null}
+            </>
           ) : activeKeys.length ? (
             <table>
               <tbody>
@@ -911,6 +953,8 @@ function Sessions({
 
   const liveHead = head ? isLive(head) : false;
   const emptyChat = !blocks.length && !you.length && !system.length;
+  const who = head || selectedRow;
+  const whoTitle = who ? callerTitle(who, t("desk.client")) : t("desk.client");
 
   return (
     <div className={`desk${selectedThread ? " has-chat" : ""}`}>
@@ -923,15 +967,20 @@ function Sessions({
             className={`conv${threadKey(j) === selectedThread ? " on" : ""}${isLive(j) ? " live" : ""}`}
             onClick={() => setSelectedThread(threadKey(j))}
           >
-            <span className="conv-avatar">{initials(j.clientLabel || j.displayModel || j.model)}</span>
+            <span className="conv-avatar">{initials(callerTitle(j, t("desk.client")))}</span>
             <span className="conv-main">
               <span className="conv-top">
-                <b>{j.clientLabel || j.displayModel || t("desk.client")}</b>
+                <b>{callerTitle(j, t("desk.client"))}</b>
                 <time>{fmtWhen(j.createdAt, t)}</time>
               </span>
+              {kindLabel(t, j.clientKind) ? <span className="conv-kind">{kindLabel(t, j.clientKind)}</span> : null}
               <span className="conv-prev">{j.lastUserPreview || t("desk.noUserText")}</span>
             </span>
-            {isLive(j) ? <span className="conv-dot" title={statusLabel(j.status)} /> : null}
+            {isLive(j) ? (
+              <span className="conv-dot" title={statusLabel(j.status)} />
+            ) : isPresent(j) ? (
+              <span className="conv-dot online" title={t("desk.online")} />
+            ) : null}
           </button>
         )) : <p className="empty">{t("desk.empty")}</p>}
       </aside>
@@ -942,13 +991,10 @@ function Sessions({
               <button type="button" className="chat-back" onClick={() => setSelectedThread(null)} aria-label={t("desk.back")}>
                 ←
               </button>
-              <span className="conv-avatar sm">{initials(head?.clientLabel || selectedRow?.clientLabel || head?.displayModel)}</span>
+              <span className="conv-avatar sm">{initials(whoTitle)}</span>
               <div className="chat-who">
-                <h1>{head?.clientLabel || selectedRow?.clientLabel || head?.displayModel || t("desk.client")}</h1>
-                <p>
-                  {liveHead ? t("desk.waiting") : head ? statusLabel(head.status) : t("desk.select")}
-                  {head?.turnCount && head.turnCount > 1 ? ` · ${t("desk.turns", { n: head.turnCount })}` : ""}
-                </p>
+                <h1>{whoTitle}</h1>
+                <p>{sessionMeta(t, who) || (liveHead ? t("desk.waiting") : head ? statusLabel(head.status) : t("desk.select"))}</p>
               </div>
             </header>
             <div className="ctx" ref={scroller}>

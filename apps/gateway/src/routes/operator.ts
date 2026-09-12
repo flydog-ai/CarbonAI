@@ -8,6 +8,7 @@ import { USER_COOKIE, UserSessions } from "../auth/user-session.ts";
 import { readJsonCapped } from "../http/read-json-capped.ts";
 import { JobEngine } from "../job/engine.ts";
 import { JobConflictError, JobNotFoundError } from "../job/errors.ts";
+import { decorateJobs, listCallers } from "../operator/callers.ts";
 import { pageContext } from "../operator/context.ts";
 
 export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, userSessions: UserSessions): Hono {
@@ -59,7 +60,14 @@ export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, use
     const s = requireReply(c);
     if (s === "forbidden") return c.json({ error: "no reply permission" }, 403);
     if (!s) return c.json({ error: "unauthorized" }, 401);
-    return c.json({ jobs: engine.list() });
+    return c.json({ jobs: decorateJobs(db, engine.list()) });
+  });
+
+  app.get("/api/operator/callers", (c) => {
+    const s = requireReply(c);
+    if (s === "forbidden") return c.json({ error: "no reply permission" }, 403);
+    if (!s) return c.json({ error: "unauthorized" }, 401);
+    return c.json({ callers: listCallers(db, engine) });
   });
 
   app.get("/api/operator/jobs/:id", (c) => {
@@ -67,7 +75,7 @@ export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, use
     if (s === "forbidden") return c.json({ error: "no reply permission" }, 403);
     if (!s) return c.json({ error: "unauthorized" }, 401);
     try {
-      return c.json(engine.get(c.req.param("id")));
+      return c.json(decorateJobs(db, [engine.get(c.req.param("id"))])[0]);
     } catch (err) {
       if (err instanceof JobNotFoundError) return c.json({ error: err.message }, 404);
       throw err;
