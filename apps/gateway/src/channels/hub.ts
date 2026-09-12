@@ -17,6 +17,7 @@ import {
   getUpdates,
   ILINK_QR_BASE,
   pollQrStatus,
+  qrImageDataUrl,
   sendBotText,
   textFromIlink,
   type IlinkFetch,
@@ -40,6 +41,8 @@ export type ChannelPublic = {
   secretSet: boolean;
   aesSet: boolean;
   bound: number;
+  pushReady: boolean;
+  lastPushError?: string;
 };
 
 export type WechatBotPublic = {
@@ -90,6 +93,7 @@ export class ChannelHub {
   private readonly qrSessions = new Map<string, QrSession>();
   private accessToken?: { value: string; expiresAt: number };
   private botAbort?: AbortController;
+  private lastPushError?: string;
 
   constructor(
     private readonly cfg: Config,
@@ -130,6 +134,8 @@ export class ChannelHub {
       secretSet: Boolean(row.app_secret),
       aesSet: Boolean(row.aes_key),
       bound: this.db.channels.listBindings(row.id).length,
+      pushReady: Boolean(row.app_id && row.app_secret && row.enabled === 1),
+      lastPushError: this.lastPushError,
     };
   }
 
@@ -213,7 +219,7 @@ export class ChannelHub {
     };
   }
 
-  async startBotQr(userId: string): Promise<{ sessionKey: string; qrcodeUrl: string }> {
+  async startBotQr(userId: string): Promise<{ sessionKey: string; qrcodeUrl: string; qrImage: string }> {
     const qr = await fetchBotQr(this.ilinkFetch);
     const sessionKey = crypto.randomUUID();
     this.qrSessions.set(sessionKey, {
@@ -223,7 +229,8 @@ export class ChannelHub {
       startedAt: this.now(),
       pollBase: ILINK_QR_BASE,
     });
-    return { sessionKey, qrcodeUrl: qr.qrcodeUrl };
+    const qrImage = await qrImageDataUrl(qr.qrcodeUrl);
+    return { sessionKey, qrcodeUrl: qr.qrcodeUrl, qrImage };
   }
 
   async pollBotQr(
@@ -361,13 +368,19 @@ export class ChannelHub {
       return;
     }
     const mp = this.enabledAccount();
+    if (mp && this.db.channels.listBindings(mp.id).length > 0 && !(mp.app_id && mp.app_secret)) {
+      this.lastPushError = "missing AppId/AppSecret";
+    }
     if (mp?.app_id && mp.app_secret) {
       for (const b of this.db.channels.listBindings(mp.id)) {
         this.lastJob.set(b.peer_id, job.id);
         try {
           await this.sendCustom(mp.app_id, mp.app_secret, b.peer_id, text);
-        } catch {
-          /* 48h window; inbound 列表 still works */
+          this.lastPushError = undefined;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.lastPushError = msg;
+          console.warn(`wechat mp push failed peer=${b.peer_id}: ${msg}`);
         }
       }
     }
@@ -574,7 +587,9 @@ export class ChannelHub {
       peer_id: openid,
       created_at: this.now(),
     });
-    return `已绑定 ${user.username}。新会话会推到这里，直接回复即可。发「列表」查看进行中的会话。`;
+    return `已绑定 ${user.username}。
+回复位置：微信里打开本公众号的对话（不是控制台，也不是别的 Bot）。
+订阅号通常不能主动推送。有新会话时请在这里发「列表」，然后直接打字回复。`;
   }
 
   private listText(): string {
@@ -602,19 +617,21 @@ export class ChannelHub {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ touser: openid, msgtype: "text", text: { content } }),
-        signal: AbortSignal.timeout(2500),
+        signal: AbortSignal.timeout(10_000),
       },
     );
     if (!res.ok) throw new Error(`wechat custom send ${res.status}`);
-    const body = (await res.json()) as { errcode?: number };
-    if (body.errcode && body.errcode !== 0) throw new Error(`wechat custom send ${body.errcode}`);
+    const body = (await res.json()) as { errcode?: number; errmsg?: string };
+    if (body.errcode && body.errcode !== 0) {
+      throw new Error(`wechat custom send ${body.errcode} ${body.errmsg ?? ""}`.trim());
+    }
   }
 
   private async token(appId: string, secret: string): Promise<string> {
     if (this.accessToken && this.accessToken.expiresAt > this.now() + 60_000) return this.accessToken.value;
     const res = await this.wxFetch(
       `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${encodeURIComponent(appId)}&secret=${encodeURIComponent(secret)}`,
-      { signal: AbortSignal.timeout(2500) },
+      { signal: AbortSignal.timeout(10_000) },
     );
     const body = (await res.json()) as { access_token?: string; expires_in?: number; errcode?: number };
     if (!body.access_token) throw new Error(`wechat token ${body.errcode ?? res.status}`);

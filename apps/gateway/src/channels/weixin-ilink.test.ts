@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { fetchBotQr, pollQrStatus, textFromIlink } from "./weixin-ilink.ts";
+import { fetchBotQr, pollQrStatus, qrImageDataUrl, textFromIlink } from "./weixin-ilink.ts";
 
 describe("weixin ilink client", () => {
   test("fetchBotQr posts get_bot_qrcode", async () => {
@@ -23,6 +23,11 @@ describe("weixin ilink client", () => {
     };
     const st = await pollQrStatus(fetchImpl, "abc");
     expect(st.status).toBe("wait");
+  });
+
+  test("qrImageDataUrl encodes a login URL as a png", async () => {
+    const data = await qrImageDataUrl("https://ilinkai.weixin.qq.com/login");
+    expect(data.startsWith("data:image/png;base64,")).toBe(true);
   });
 
   test("textFromIlink joins text items", () => {

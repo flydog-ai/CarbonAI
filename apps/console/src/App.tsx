@@ -1465,6 +1465,8 @@ type WechatChannel = {
   secretSet?: boolean;
   aesSet?: boolean;
   bound?: number;
+  pushReady?: boolean;
+  lastPushError?: string;
 };
 
 function ChannelAdmin({
@@ -1511,6 +1513,9 @@ function ChannelAdmin({
     <div className="card card-pad" style={{ maxWidth: 560, marginTop: 16 }}>
       <h3>{t("channels.title")}</h3>
       <p className="sub">{t("channels.sub")}</p>
+      <p className="sub">{t("channels.replyWhere")}</p>
+      {wechat && !wechat.pushReady ? <p className="err">{t("channels.pushNeedSecret")}</p> : null}
+      {wechat?.lastPushError ? <p className="err">{t("channels.lastPush", { error: wechat.lastPushError })}</p> : null}
       <label>{t("channels.callback")}</label>
       <p>
         <code className="mono">{callbackUrl || "—"}</code>{" "}
@@ -1622,11 +1627,13 @@ function WechatBotAdmin({
           qrcodeUrl?: string;
           connected?: boolean;
           wechatBot?: { connected?: boolean; botId?: string };
+          qrImage?: string;
           message?: string;
         }>(`/api/admin/channels/wechat-bot/qr?sessionKey=${encodeURIComponent(sessionKey)}${verify ? `&verifyCode=${encodeURIComponent(verify)}` : ""}`);
         if (!res.ok) return;
         setStatus(body.status || "");
-        if (body.qrcodeUrl) setQr(body.qrcodeUrl);
+        if (body.qrImage) setQr(body.qrImage);
+        else if (body.qrcodeUrl && body.qrcodeUrl.startsWith("data:image")) setQr(body.qrcodeUrl);
         if (body.connected || body.status === "confirmed") {
           setConnected(true);
           setBotId(body.wechatBot?.botId || botId);
@@ -1670,17 +1677,17 @@ function WechatBotAdmin({
           onClick={async () => {
             setBusy(true);
             setErr("");
-            const { res, body } = await api<{ sessionKey?: string; qrcodeUrl?: string; error?: string }>(
+            const { res, body } = await api<{ sessionKey?: string; qrcodeUrl?: string; qrImage?: string; error?: string }>(
               "/api/admin/channels/wechat-bot/qr",
               { method: "POST" },
             );
             setBusy(false);
-            if (!res.ok || !body.sessionKey || !body.qrcodeUrl) {
+            if (!res.ok || !body.sessionKey || !(body.qrImage || body.qrcodeUrl)) {
               setErr(body.error || t("settings.saveFailed"));
               return;
             }
             setSessionKey(body.sessionKey);
-            setQr(body.qrcodeUrl);
+            setQr(body.qrImage || body.qrcodeUrl || "");
             setConnected(false);
           }}
         >
@@ -1740,6 +1747,7 @@ function WechatBind({
       <p className="sub">
         {bound ? t("channels.bound", { peer }) : enabled ? t("channels.unbound") : t("channels.needEnable")}
       </p>
+      <p className="sub">{t("channels.replyWhere")}</p>
       {err ? <p className="err">{err}</p> : null}
       {code ? (
         <p>

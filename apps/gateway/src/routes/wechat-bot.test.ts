@@ -78,8 +78,13 @@ describe("wechat iLink bot", () => {
 
       const start = await fetch(`${url}/api/admin/channels/wechat-bot/qr`, { method: "POST", headers: auth });
       expect(start.status).toBe(200);
-      const { sessionKey, qrcodeUrl } = (await start.json()) as { sessionKey: string; qrcodeUrl: string };
+      const { sessionKey, qrcodeUrl, qrImage } = (await start.json()) as {
+        sessionKey: string;
+        qrcodeUrl: string;
+        qrImage?: string;
+      };
       expect(qrcodeUrl).toContain("qr.example");
+      expect(qrImage?.startsWith("data:image/png")).toBe(true);
 
       const polled = await fetch(
         `${url}/api/admin/channels/wechat-bot/qr?sessionKey=${encodeURIComponent(sessionKey)}`,

@@ -1,3 +1,5 @@
+import QRCode from "qrcode";
+
 /**
  * Tencent iLink bot HTTP JSON API, as documented for third-party backends:
  * https://docs.openclaw.ai/zh-CN/channels/wechat
@@ -77,6 +79,12 @@ export async function fetchBotQr(fetchImpl: IlinkFetch, baseUrl = ILINK_QR_BASE)
   const body = (await readJson(res, "get_bot_qrcode")) as { qrcode?: string; qrcode_img_content?: string };
   if (!body.qrcode || !body.qrcode_img_content) throw new Error("get_bot_qrcode missing qrcode");
   return { qrcode: body.qrcode, qrcodeUrl: body.qrcode_img_content };
+}
+
+/** Encode a login URL as a PNG data URL so the console does not hotlink WeChat CDNs. */
+export async function qrImageDataUrl(payload: string): Promise<string> {
+  if (payload.startsWith("data:image/")) return payload;
+  return QRCode.toDataURL(payload, { width: 280, margin: 1, errorCorrectionLevel: "M" });
 }
 
 export async function pollQrStatus(
