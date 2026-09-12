@@ -101,19 +101,8 @@ export function rememberCaller(
       userId: client.userId,
     };
   }
-  if (client.visitorId) {
-    const row = db.visitors.getById(client.visitorId);
-    if (row) {
-      const next = touchVisitor(db, row, sight, opts.protocol);
-      return {
-        clientKeyId: next.id,
-        clientLabel: next.short_id,
-        callerLabel: next.short_id,
-        visitorId: next.id,
-        keyPrefix: next.key_prefix ?? undefined,
-      };
-    }
-  }
+  // Guest keys are tickets, not identity — a shared promo key is many people.
+  // Who it is = connecting IP + user-agent (and thus client kind).
   const fp = visitorFingerprint(sight.ip, sight.userAgent);
   const existing = db.visitors.getByFingerprint(fp);
   const row = existing

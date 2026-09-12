@@ -119,6 +119,20 @@ describe("guest visitors", () => {
         callers: { label: string; kind: string; clientKind?: string; presence: string }[];
       };
       expect(body.callers.some((c) => c.kind === "guest" && c.label.startsWith("G-") && c.clientKind === "claude-code")).toBe(true);
+
+      const otherCli = await fetch(`${url}/v1/models`, {
+        headers: {
+          "x-api-key": key1,
+          "anthropic-version": "2023-06-01",
+          "user-agent": "codex-cli/0.44",
+        },
+      });
+      expect(otherCli.status).toBe(200);
+      const callers2 = await fetch(`${url}/api/operator/callers`, { headers: auth });
+      const body2 = (await callers2.json()) as { callers: { label: string; clientKind?: string }[] };
+      const kinds = body2.callers.filter((c) => c.clientKind === "claude-code" || c.clientKind === "codex").map((c) => c.clientKind);
+      expect(kinds.includes("claude-code")).toBe(true);
+      expect(kinds.includes("codex")).toBe(true);
     });
   });
 

@@ -38,18 +38,26 @@ describe("issueHomepageVisitor", () => {
 });
 
 describe("rememberCaller", () => {
-  test("guest key maps to the visitor; toml key gets an IP/UA identity", () => {
+  test("named keys stay the account; guest keys identify by connecting IP and user-agent", () => {
     const db = tmpDb();
     const home = issueHomepageVisitor(db, sight());
-    const fromKey = rememberCaller(
+    const fromCli = rememberCaller(
       db,
       { label: home.short_id, keyId: home.id, visitorId: home.id },
       sight({ userAgent: "claude-cli/1.0", clientKind: "claude-code" }),
       { protocol: "anthropic_messages" },
     );
-    expect(fromKey.visitorId).toBe(home.id);
-    expect(fromKey.callerLabel).toBe(home.short_id);
-    expect(db.visitors.getById(home.id)?.last_client).toBe("claude-code");
+    expect(fromCli.visitorId).not.toBe(home.id);
+    expect(fromCli.callerLabel.startsWith("G-")).toBe(true);
+    expect(db.visitors.getById(fromCli.visitorId!)?.last_client).toBe("claude-code");
+
+    const sameCli = rememberCaller(
+      db,
+      { label: "shared", keyId: "shared" },
+      sight({ userAgent: "claude-cli/1.0", clientKind: "claude-code" }),
+      { protocol: "anthropic_messages" },
+    );
+    expect(sameCli.visitorId).toBe(fromCli.visitorId);
 
     const toml = rememberCaller(
       db,
@@ -57,9 +65,8 @@ describe("rememberCaller", () => {
       sight({ ip: "198.51.100.4", userAgent: "codex-cli/0.1", clientKind: "codex" }),
       { protocol: "openai_responses" },
     );
-    expect(toml.visitorId).toBeTruthy();
+    expect(toml.visitorId).not.toBe(fromCli.visitorId);
     expect(toml.visitorId).not.toBe(home.id);
-    expect(toml.callerLabel.startsWith("G-")).toBe(true);
     expect(db.visitors.getByKeyHash(hashApiKey(home.key_plain!))?.id).toBe(home.id);
     db.close();
   });
