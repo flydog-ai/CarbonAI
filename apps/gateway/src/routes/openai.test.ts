@@ -117,6 +117,10 @@ describe("OpenAI Chat Completions HTTP", () => {
         const x = await fetch(`${url}/v1/models`, { headers: { "x-api-key": "sk-carbon-local" } });
         expect(bearer.status).toBe(200);
         expect(x.status).toBe(200);
+        const body = (await x.json()) as { data: { id: string }[] };
+        const ids = body.data.map((m) => m.id);
+        expect(ids[0]).toBe("gpt-5");
+        expect(ids.indexOf("gpt-5")).toBeLessThan(ids.indexOf("claude-fable-5-1"));
       },
       (c) => {
         c.auth.apiKeys = [{ label: "local", key: "sk-carbon-local" }];

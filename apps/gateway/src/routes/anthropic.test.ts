@@ -49,8 +49,10 @@ describe("Anthropic HTTP", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as { data: { id: string }[] };
       const ids = body.data.map((m) => m.id);
+      expect(ids[0]).toBe("claude-fable-5-1");
       expect(ids).toContain("carbon-default");
-      expect(ids.some((id) => id.startsWith("claude-"))).toBe(true);
+      expect(ids).toContain("gpt-5");
+      expect(ids.indexOf("claude-fable-5-1")).toBeLessThan(ids.indexOf("gpt-5"));
     });
   });
 

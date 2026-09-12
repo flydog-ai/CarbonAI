@@ -144,9 +144,16 @@ describe("HTTP smoke (real listen)", () => {
     expect(html).toContain("app=claude");
     expect(html).toContain("导入到 Claude Code");
     expect(html).toContain("id=\"cc-switch-import\"");
+    const panelAt = html.indexOf('class="panel"');
+    const importAt = html.indexOf('id="cc-switch-import"');
+    const ctaAt = html.indexOf('class="cta-row"');
+    expect(panelAt).toBeGreaterThan(-1);
+    expect(importAt).toBeGreaterThan(panelAt);
+    expect(html.slice(ctaAt, panelAt)).not.toContain("cc-switch-import");
     expect(html).toContain(encodeURIComponent(srv.url4));
     expect(html).toContain("apiKey=");
     expect(html).toContain("sk-carbon-local");
+    expect(html).toContain("claude-fable-5-1");
     expect(html).toContain("Guest key");
     expect(html).toContain("/console");
     expect(html).not.toContain(encodeURIComponent(`${srv.url4}/v1`));

@@ -104,9 +104,13 @@ export const DEFAULT_CONFIG: Config = {
     defaultId: "carbon-default",
     defaultDisplay: "Carbon AI",
     aliases: {
+      "claude-fable-5-1": "Carbon AI",
+      "claude-opus-5": "Carbon AI",
+      "claude-sonnet-5": "Carbon AI",
+      "claude-haiku-4-5": "Carbon AI",
       "claude-opus-4-6": "Carbon AI",
       "claude-sonnet-4-6": "Carbon AI",
-      "claude-haiku-4-5": "Carbon AI",
+      "gpt-5": "Carbon AI",
     },
   },
   cors: {

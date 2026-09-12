@@ -53,7 +53,13 @@ export {
 } from "./apply-patch.ts";
 export { opaqueEncryptedContent } from "./encrypted.ts";
 export { detectProtocol } from "./detect.ts";
-export { claudeModelSlots, displayNameFor, listModels, stripContextSuffix } from "./models.ts";
+export {
+  claudeModelSlots,
+  displayNameFor,
+  listModels,
+  stripContextSuffix,
+  type ModelListPrefer,
+} from "./models.ts";
 export {
   BEGIN_PATCH_TEMPLATE,
   blocksFromReply,

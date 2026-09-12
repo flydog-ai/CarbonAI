@@ -13,11 +13,12 @@ function isAnthropic(c: { req: { header: (n: string) => string | undefined } }):
 export function modelsRoutes(cfg: Config, db?: CarbonDb): Hono {
   const app = new Hono();
 
-  const catalog = (): ReturnType<typeof listModels> =>
+  const catalog = (prefer: "anthropic" | "openai") =>
     listModels({
       defaultId: cfg.models.defaultId,
       defaultDisplay: cfg.models.defaultDisplay,
       aliases: cfg.models.aliases,
+      prefer,
     });
 
   const requireClient = (c: {
@@ -35,8 +36,10 @@ export function modelsRoutes(cfg: Config, db?: CarbonDb): Hono {
   const list = (c: Context) => {
     const client = requireClient(c);
     if ("error" in client) return c.json(client, 401);
-    if (db) rememberCaller(db, client, requestSight(c, cfg));
-    const models = catalog();
+    if (db && !("error" in client)) {
+      rememberCaller(db, client, requestSight(c, cfg));
+    }
+    const models = catalog(isAnthropic(c) ? "anthropic" : "openai");
     if (isAnthropic(c)) {
       const data = models.map((m) => ({
         type: "model",
@@ -65,9 +68,11 @@ export function modelsRoutes(cfg: Config, db?: CarbonDb): Hono {
   const one = (c: Context) => {
     const client = requireClient(c);
     if ("error" in client) return c.json(client, 401);
-    if (db) rememberCaller(db, client, requestSight(c, cfg));
+    if (db && !("error" in client)) {
+      rememberCaller(db, client, requestSight(c, cfg));
+    }
     const id = c.req.param("id");
-    const found = catalog().find((m) => m.id === id);
+    const found = catalog(isAnthropic(c) ? "anthropic" : "openai").find((m) => m.id === id);
     const display = found?.displayName ?? cfg.models.defaultDisplay;
     if (isAnthropic(c)) {
       return c.json({

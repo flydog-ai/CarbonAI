@@ -42,9 +42,12 @@ default_id = "carbon-default"
 default_display = "Carbon AI"
 
 [models.aliases]
-"claude-opus-4-6" = "Carbon AI (Opus slot)"
-"claude-sonnet-4-6" = "Carbon AI (Sonnet slot)"
+"claude-fable-5-1" = "Carbon AI (Fable slot)"
+"claude-opus-5" = "Carbon AI (Opus slot)"
+"claude-sonnet-5" = "Carbon AI (Sonnet slot)"
 "claude-haiku-4-5" = "Carbon AI (Haiku slot)"
+"claude-opus-4-6" = "Carbon AI (Opus 4.6 slot)"
+"claude-sonnet-4-6" = "Carbon AI (Sonnet 4.6 slot)"
 "gpt-5" = "Carbon AI (GPT slot)"
 
 [cors]
