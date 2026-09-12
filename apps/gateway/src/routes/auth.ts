@@ -128,7 +128,87 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, ch
     const user = authedUser(c);
     if (!user) return c.json({ error: "unauthorized" }, 401);
     if (!channels) return c.json({ error: "unavailable" }, 503);
-    return c.json(channels.bindingFor(user.id));
+    return c.json(channels.viewFor(user.id, c.req.url));
+  });
+
+  app.get("/api/me/channels/events", (c) => {
+    const user = authedUser(c);
+    if (!user) return c.json({ error: "unauthorized" }, 401);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    const kind = c.req.query("kind") || "wechat_mp";
+    return c.json({ events: channels.listEvents(kind, user.id) });
+  });
+
+  app.patch("/api/me/channels", async (c) => {
+    const user = authedUser(c);
+    if (!user) return c.json({ error: "unauthorized" }, 401);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    const body = (await readJsonCapped(c.req.raw, 8192)) as {
+      kind?: string;
+      label?: string;
+      appId?: string;
+      appSecret?: string;
+      token?: string;
+      aesKey?: string | null;
+      enabled?: boolean;
+      webhook?: string;
+    };
+    const kind = body.kind || "wechat_mp";
+    try {
+      if (kind === "wechat_mp") {
+        channels.upsertWechat(user.id, {
+          label: body.label,
+          appId: body.appId,
+          appSecret: body.appSecret,
+          token: body.token,
+          aesKey: body.aesKey,
+          enabled: body.enabled,
+        });
+      } else if (kind === "telegram" || kind === "feishu" || kind === "dingtalk") {
+        channels.upsertGeneric(kind, user.id, {
+          label: body.label,
+          appId: body.appId,
+          appSecret: body.appSecret,
+          token: body.token,
+          enabled: body.enabled,
+          webhook: body.webhook,
+        });
+      } else {
+        return c.json({ error: "unsupported channel" }, 400);
+      }
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "save failed" }, 400);
+    }
+    return c.json(channels.viewFor(user.id, c.req.url));
+  });
+
+  app.post("/api/me/channels/wechat-bot/qr", async (c) => {
+    const user = authedUser(c);
+    if (!user) return c.json({ error: "unauthorized" }, 401);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    try {
+      return c.json(await channels.startBotQr(user.id));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "qr failed" }, 502);
+    }
+  });
+
+  app.get("/api/me/channels/wechat-bot/qr", async (c) => {
+    const user = authedUser(c);
+    if (!user) return c.json({ error: "unauthorized" }, 401);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    const sessionKey = c.req.query("sessionKey") ?? "";
+    const verifyCode = c.req.query("verifyCode") ?? undefined;
+    if (!sessionKey) return c.json({ error: "sessionKey required" }, 400);
+    return c.json(await channels.pollBotQr(sessionKey, verifyCode, user.id));
+  });
+
+  app.post("/api/me/channels/wechat-bot/logout", (c) => {
+    const user = authedUser(c);
+    if (!user) return c.json({ error: "unauthorized" }, 401);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    channels.logoutBot(user.id);
+    return c.json({ wechatBot: channels.publicWechatBot(user.id) });
   });
 
   app.post("/api/me/channels/bind-code", (c) => {

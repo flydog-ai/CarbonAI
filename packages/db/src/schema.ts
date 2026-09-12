@@ -113,6 +113,7 @@ CREATE INDEX IF NOT EXISTS visitors_seen ON visitors(last_seen_at);
 
 CREATE TABLE IF NOT EXISTS channel_accounts (
   id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL DEFAULT '',
   kind        TEXT NOT NULL,
   label       TEXT NOT NULL,
   app_id      TEXT NOT NULL DEFAULT '',
@@ -125,7 +126,7 @@ CREATE TABLE IF NOT EXISTS channel_accounts (
   sync_buf    TEXT
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS channel_accounts_kind ON channel_accounts(kind);
+CREATE UNIQUE INDEX IF NOT EXISTS channel_accounts_user_kind ON channel_accounts(user_id, kind);
 
 CREATE TABLE IF NOT EXISTS channel_bindings (
   id          TEXT PRIMARY KEY,
@@ -227,6 +228,7 @@ export type SessionRow = {
 
 export type ChannelAccountRow = {
   id: string;
+  user_id: string;
   kind: string;
   label: string;
   app_id: string;

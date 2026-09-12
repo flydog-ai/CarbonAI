@@ -73,30 +73,23 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, c
   });
 
   app.get("/api/admin/channels", (c) => {
-    if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
+    const user = superadmin(c);
+    if (!user) return c.json({ error: "forbidden" }, 403);
     if (!channels) return c.json({ error: "unavailable" }, 503);
-    const origin = channels.callbackInfo(c.req.url);
-    return c.json({
-      ...origin,
-      feishuCallback: origin.callbackUrl.replace(/\/hooks\/wechat$/, "/hooks/feishu"),
-      dingtalkCallback: origin.callbackUrl.replace(/\/hooks\/wechat$/, "/hooks/dingtalk"),
-      wechat: channels.publicWechat(),
-      wechatBot: channels.publicWechatBot(),
-      telegram: channels.publicGeneric("telegram"),
-      feishu: channels.publicGeneric("feishu"),
-      dingtalk: channels.publicGeneric("dingtalk"),
-    });
+    return c.json(channels.viewFor(user.id, c.req.url));
   });
 
   app.get("/api/admin/channels/events", (c) => {
-    if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
+    const user = superadmin(c);
+    if (!user) return c.json({ error: "forbidden" }, 403);
     if (!channels) return c.json({ error: "unavailable" }, 503);
     const kind = c.req.query("kind") || "wechat_mp";
-    return c.json({ events: channels.listEvents(kind) });
+    return c.json({ events: channels.listEvents(kind, user.id) });
   });
 
   app.patch("/api/admin/channels", async (c) => {
-    if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
+    const user = superadmin(c);
+    if (!user) return c.json({ error: "forbidden" }, 403);
     if (!channels) return c.json({ error: "unavailable" }, 503);
     const body = (await readJsonCapped(c.req.raw, 8192)) as {
       kind?: string;
@@ -111,7 +104,7 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, c
     const kind = body.kind || "wechat_mp";
     try {
       if (kind === "wechat_mp") {
-        channels.upsertWechat({
+        channels.upsertWechat(user.id, {
           label: body.label,
           appId: body.appId,
           appSecret: body.appSecret,
@@ -120,7 +113,7 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, c
           enabled: body.enabled,
         });
       } else if (kind === "telegram" || kind === "feishu" || kind === "dingtalk") {
-        channels.upsertGeneric(kind, {
+        channels.upsertGeneric(kind, user.id, {
           label: body.label,
           appId: body.appId,
           appSecret: body.appSecret,
@@ -134,17 +127,7 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, c
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : "save failed" }, 400);
     }
-    const origin = channels.callbackInfo(c.req.url);
-    return c.json({
-      ...origin,
-      feishuCallback: origin.callbackUrl.replace(/\/hooks\/wechat$/, "/hooks/feishu"),
-      dingtalkCallback: origin.callbackUrl.replace(/\/hooks\/wechat$/, "/hooks/dingtalk"),
-      wechat: channels.publicWechat(),
-      wechatBot: channels.publicWechatBot(),
-      telegram: channels.publicGeneric("telegram"),
-      feishu: channels.publicGeneric("feishu"),
-      dingtalk: channels.publicGeneric("dingtalk"),
-    });
+    return c.json(channels.viewFor(user.id, c.req.url));
   });
 
   app.post("/api/admin/channels/wechat-bot/qr", async (c) => {
@@ -159,19 +142,21 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, c
   });
 
   app.get("/api/admin/channels/wechat-bot/qr", async (c) => {
-    if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
+    const user = superadmin(c);
+    if (!user) return c.json({ error: "forbidden" }, 403);
     if (!channels) return c.json({ error: "unavailable" }, 503);
     const sessionKey = c.req.query("sessionKey") ?? "";
     const verifyCode = c.req.query("verifyCode") ?? undefined;
     if (!sessionKey) return c.json({ error: "sessionKey required" }, 400);
-    return c.json(await channels.pollBotQr(sessionKey, verifyCode));
+    return c.json(await channels.pollBotQr(sessionKey, verifyCode, user.id));
   });
 
   app.post("/api/admin/channels/wechat-bot/logout", (c) => {
-    if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
+    const user = superadmin(c);
+    if (!user) return c.json({ error: "forbidden" }, 403);
     if (!channels) return c.json({ error: "unavailable" }, 503);
-    channels.logoutBot();
-    return c.json({ wechatBot: channels.publicWechatBot() });
+    channels.logoutBot(user.id);
+    return c.json({ wechatBot: channels.publicWechatBot(user.id) });
   });
 
   app.get("/api/admin/users", (c) => {

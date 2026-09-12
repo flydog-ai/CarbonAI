@@ -207,10 +207,6 @@ export function App() {
                 <IconUsers />
                 <span className="nav-text">{t("nav.users")}</span>
               </button>
-              <button type="button" className={`nav-btn${view === "settings" ? " on" : ""}`} onClick={() => go("settings")}>
-                <IconCog />
-                <span className="nav-text">{t("nav.settings")}</span>
-              </button>
             </div>
           ) : null}
           {canDesk ? (
@@ -227,6 +223,10 @@ export function App() {
             <button type="button" className={`nav-btn${view === "keys" ? " on" : ""}`} onClick={() => go("keys")}>
               <IconKey />
               <span className="nav-text">{t("nav.keys")}</span>
+            </button>
+            <button type="button" className={`nav-btn${view === "settings" ? " on" : ""}`} onClick={() => go("settings")}>
+              <IconCog />
+              <span className="nav-text">{t("nav.settings")}</span>
             </button>
           </div>
         </nav>
@@ -303,7 +303,9 @@ export function App() {
             <Keys t={t} connect={connect} secretFor={secretFor} rememberSecret={rememberSecret} copy={copy} flash={flash} />
           ) : null}
           {view === "users" && isAdmin ? <Users t={t} statusLabel={statusLabel} /> : null}
-          {view === "settings" && isAdmin ? <Settings t={t} flash={flash} onSite={setBrand} copy={copy} canDesk={canDesk} /> : null}
+          {view === "settings" ? (
+            <Settings t={t} flash={flash} onSite={setBrand} copy={copy} canDesk={canDesk} isAdmin={isAdmin} />
+          ) : null}
         </div>
       </section>
       {toast ? <div className="toast">{toast}</div> : null}
@@ -1357,14 +1359,16 @@ function Settings({
   onSite,
   copy,
   canDesk,
+  isAdmin,
 }: {
   t: (k: string, v?: Record<string, string | number>) => string;
   flash: (msg: string) => void;
   onSite: (name: string) => void;
   copy: (text: string, ok: string) => void;
   canDesk: boolean;
+  isAdmin: boolean;
 }) {
-  const [section, setSection] = useState<SettingsSection>("basic");
+  const [section, setSection] = useState<SettingsSection>(isAdmin ? "basic" : "connect");
   const [kind, setKind] = useState<ConnectKind>("wechat_mp");
   const [mpOn, setMpOn] = useState(false);
   const [botOn, setBotOn] = useState(false);
@@ -1403,7 +1407,7 @@ function Settings({
       telegram?: { enabled?: boolean };
       feishu?: { enabled?: boolean };
       dingtalk?: { enabled?: boolean };
-    }>("/api/admin/channels");
+    }>("/api/me/channels");
     if (!res.ok) return;
     setMpOn(Boolean(body.wechat?.enabled));
     setBotOn(Boolean(body.wechatBot?.connected));
@@ -1411,7 +1415,10 @@ function Settings({
     setFsOn(Boolean(body.feishu?.enabled));
     setDdOn(Boolean(body.dingtalk?.enabled));
   }
-  useEffect(() => { void load(); void loadConnect(); }, []);
+  useEffect(() => {
+    if (isAdmin) void load();
+    void loadConnect();
+  }, [isAdmin]);
 
   const types: { id: ConnectKind; soon?: boolean; on?: boolean }[] = [
     { id: "wechat_mp", on: mpOn },
@@ -1423,18 +1430,20 @@ function Settings({
 
   return (
     <div className="settings-page">
-      <div className="settings-tabs">
-        <div className="seg-switch" role="tablist">
-          <button type="button" className={section === "basic" ? "on" : ""} onClick={() => setSection("basic")}>
-            {t("settings.section.basic")}
-          </button>
-          <button type="button" className={section === "connect" ? "on" : ""} onClick={() => setSection("connect")}>
-            {t("settings.section.connect")}
-          </button>
+      {isAdmin ? (
+        <div className="settings-tabs">
+          <div className="seg-switch" role="tablist">
+            <button type="button" className={section === "basic" ? "on" : ""} onClick={() => setSection("basic")}>
+              {t("settings.section.basic")}
+            </button>
+            <button type="button" className={section === "connect" ? "on" : ""} onClick={() => setSection("connect")}>
+              {t("settings.section.connect")}
+            </button>
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      {section === "basic" ? (
+      {section === "basic" && isAdmin ? (
         <div className="card card-pad">
           <h3>{t("settings.title")}</h3>
           <p className="sub">{t("settings.sub")}</p>
@@ -1583,7 +1592,7 @@ function ChannelAdmin({
       httpsRequired?: boolean;
       wechat?: WechatChannel | null;
       error?: string;
-    }>("/api/admin/channels");
+    }>("/api/me/channels");
     if (!res.ok) {
       setErr(body.error || t("err.forbidden"));
       return;
@@ -1599,7 +1608,7 @@ function ChannelAdmin({
     onStatus?.(Boolean(body.wechat?.enabled));
   }
   async function loadEvents() {
-    const { res, body } = await api<{ events?: ChannelEvent[] }>("/api/admin/channels/events?kind=wechat_mp");
+    const { res, body } = await api<{ events?: ChannelEvent[] }>("/api/me/channels/events?kind=wechat_mp");
     if (res.ok) setEvents(body.events || []);
   }
   useEffect(() => { void load(); void loadEvents(); }, []);
@@ -1612,7 +1621,7 @@ function ChannelAdmin({
       httpsRequired?: boolean;
       wechat?: WechatChannel | null;
       error?: string;
-    }>("/api/admin/channels", {
+    }>("/api/me/channels", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ kind: "wechat_mp", ...payload }),
@@ -1805,7 +1814,7 @@ function WechatBotAdmin({
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const { res, body } = await api<{ wechatBot?: { connected?: boolean; botId?: string } }>("/api/admin/channels");
+    const { res, body } = await api<{ wechatBot?: { connected?: boolean; botId?: string } }>("/api/me/channels");
     if (!res.ok) return;
     setConnected(Boolean(body.wechatBot?.connected));
     setBotId(body.wechatBot?.botId || "");
@@ -1824,7 +1833,7 @@ function WechatBotAdmin({
           wechatBot?: { connected?: boolean; botId?: string };
           qrImage?: string;
           message?: string;
-        }>(`/api/admin/channels/wechat-bot/qr?sessionKey=${encodeURIComponent(sessionKey)}${verify ? `&verifyCode=${encodeURIComponent(verify)}` : ""}`);
+        }>(`/api/me/channels/wechat-bot/qr?sessionKey=${encodeURIComponent(sessionKey)}${verify ? `&verifyCode=${encodeURIComponent(verify)}` : ""}`);
         if (!res.ok) return;
         setStatus(body.status || "");
         if (body.qrImage) setQr(body.qrImage);
@@ -1872,7 +1881,7 @@ function WechatBotAdmin({
             setBusy(true);
             setErr("");
             const { res, body } = await api<{ sessionKey?: string; qrcodeUrl?: string; qrImage?: string; error?: string }>(
-              "/api/admin/channels/wechat-bot/qr",
+              "/api/me/channels/wechat-bot/qr",
               { method: "POST" },
             );
             setBusy(false);
@@ -1892,7 +1901,7 @@ function WechatBotAdmin({
             className="btn btn-sm btn-secondary"
             type="button"
             onClick={async () => {
-              await api("/api/admin/channels/wechat-bot/logout", { method: "POST" });
+              await api("/api/me/channels/wechat-bot/logout", { method: "POST" });
               setConnected(false);
               setBotId("");
               setQr("");
@@ -1913,7 +1922,7 @@ function WechatBotLog({ t }: { t: (k: string, v?: Record<string, string | number
   const [events, setEvents] = useState<ChannelEvent[]>([]);
   useEffect(() => {
     void (async () => {
-      const { res, body } = await api<{ events?: ChannelEvent[] }>("/api/admin/channels/events?kind=wechat_bot");
+      const { res, body } = await api<{ events?: ChannelEvent[] }>("/api/me/channels/events?kind=wechat_bot");
       if (res.ok) setEvents(body.events || []);
     })();
   }, []);
@@ -2057,7 +2066,7 @@ function GenericConnect({
       dingtalk?: { enabled?: boolean; webhook?: string; secretSet?: boolean };
       feishuCallback?: string;
       dingtalkCallback?: string;
-    }>("/api/admin/channels");
+    }>("/api/me/channels");
     if (!res.ok) return;
     const row = body[kind];
     setEnabled(Boolean(row?.enabled));
@@ -2071,7 +2080,7 @@ function GenericConnect({
       setWebhook(body.dingtalk?.webhook || "");
       setHook(body.dingtalkCallback || "");
     }
-    const ev = await api<{ events?: ChannelEvent[] }>(`/api/admin/channels/events?kind=${kind}`);
+    const ev = await api<{ events?: ChannelEvent[] }>(`/api/me/channels/events?kind=${kind}`);
     if (ev.res.ok) setEvents(ev.body.events || []);
   }
   useEffect(() => { void load(); }, [kind]);
@@ -2079,7 +2088,7 @@ function GenericConnect({
   async function save(extra: Record<string, unknown> = {}) {
     setBusy(true);
     setErr("");
-    const { res, body } = await api<{ error?: string } & Record<string, { enabled?: boolean }>>("/api/admin/channels", {
+    const { res, body } = await api<{ error?: string } & Record<string, { enabled?: boolean }>>("/api/me/channels", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({

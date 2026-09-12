@@ -1,5 +1,5 @@
 import type { Config } from "@carbon-ai/config";
-import { newBindingId, newChannelEventId, newChannelId, type CarbonDb } from "@carbon-ai/db";
+import { newBindingId, newChannelEventId, newChannelId, type CarbonDb, type ChannelAccountRow } from "@carbon-ai/db";
 import { siteOrigin } from "../home/cc-switch.ts";
 import type { JobEngine, JobSummary } from "../job/engine.ts";
 import {
@@ -59,6 +59,7 @@ export type ChannelPublic = {
   token?: string;
   aesKey?: string;
   secretPrefix?: string;
+  peerMasked?: string;
 };
 
 export type ChannelEventView = {
@@ -77,6 +78,7 @@ export type GenericChannelPublic = {
   tokenPrefix?: string;
   webhook?: string;
   bound: number;
+  peerMasked?: string;
 };
 
 export type WechatBotPublic = {
@@ -86,6 +88,7 @@ export type WechatBotPublic = {
   connected: boolean;
   botId: string;
   bound: number;
+  peerMasked?: string;
 };
 
 type BindCode = { userId: string; accountId: string; expiresAt: number };
@@ -134,10 +137,10 @@ export class ChannelHub {
   private readonly lastJob = new Map<string, string>();
   private readonly lastContext = new Map<string, string>();
   private readonly qrSessions = new Map<string, QrSession>();
-  private accessToken?: { value: string; expiresAt: number };
-  private botAbort?: AbortController;
-  private tgAbort?: AbortController;
-  private lastPushError?: string;
+  private readonly accessTokens = new Map<string, { value: string; expiresAt: number }>();
+  private readonly botLoops = new Map<string, AbortController>();
+  private readonly tgLoops = new Map<string, AbortController>();
+  private readonly lastPush = new Map<string, string>();
 
   constructor(
     private readonly cfg: Config,
@@ -149,15 +152,15 @@ export class ChannelHub {
   ) {}
 
   start(): void {
-    this.restartBotMonitor();
-    this.restartTelegram();
+    this.restartAllBots();
+    this.restartAllTelegram();
   }
 
   stop(): void {
-    this.botAbort?.abort();
-    this.botAbort = undefined;
-    this.tgAbort?.abort();
-    this.tgAbort = undefined;
+    for (const ac of this.botLoops.values()) ac.abort();
+    this.botLoops.clear();
+    for (const ac of this.tgLoops.values()) ac.abort();
+    this.tgLoops.clear();
   }
 
   callbackInfo(requestUrl: string): { callbackUrl: string; httpsRequired: boolean } {
@@ -168,9 +171,26 @@ export class ChannelHub {
     };
   }
 
-  publicWechat(): ChannelPublic | null {
-    const row = this.db.channels.getByKind(KIND);
+  viewFor(userId: string, requestUrl: string) {
+    const origin = this.callbackInfo(requestUrl);
+    const bind = this.bindingFor(userId);
+    return {
+      ...origin,
+      feishuCallback: origin.callbackUrl.replace(/\/hooks\/wechat$/, "/hooks/feishu"),
+      dingtalkCallback: origin.callbackUrl.replace(/\/hooks\/wechat$/, "/hooks/dingtalk"),
+      wechat: this.publicWechat(userId),
+      wechatBot: this.publicWechatBot(userId),
+      telegram: this.publicGeneric("telegram", userId),
+      feishu: this.publicGeneric("feishu", userId),
+      dingtalk: this.publicGeneric("dingtalk", userId),
+      enabled: bind.enabled,
+    };
+  }
+
+  publicWechat(userId: string): ChannelPublic | null {
+    const row = this.db.channels.getByUserKind(userId, KIND);
     if (!row) return null;
+    const mine = this.db.channels.getBindingByUser(row.id, userId);
     return {
       id: row.id,
       kind: KIND,
@@ -182,15 +202,16 @@ export class ChannelHub {
       aesSet: Boolean(row.aes_key),
       bound: this.db.channels.listBindings(row.id).length,
       pushReady: Boolean(row.app_id && row.app_secret && row.enabled === 1),
-      lastPushError: this.lastPushError,
+      lastPushError: this.lastPush.get(row.id),
       token: row.token || undefined,
       aesKey: row.aes_key || undefined,
       secretPrefix: maskSecret(row.app_secret),
+      peerMasked: mine ? maskPeer(mine.peer_id) : undefined,
     };
   }
 
-  listEvents(kind: string): ChannelEventView[] {
-    return this.db.channels.listEvents(kind, 30).map((e) => ({
+  listEvents(kind: string, userId: string): ChannelEventView[] {
+    return this.db.channels.listEventsForUser(userId, kind, 30).map((e) => ({
       at: e.created_at,
       level: e.level,
       event: e.event,
@@ -198,13 +219,13 @@ export class ChannelHub {
     }));
   }
 
-  note(kind: string, level: "info" | "warn" | "error", event: string, detail?: string): void {
+  private log(account: ChannelAccountRow | null | undefined, level: "info" | "warn" | "error", event: string, detail?: string): void {
+    if (!account) return;
     try {
-      const account = this.db.channels.getByKind(kind);
       this.db.channels.addEvent({
         id: newChannelEventId(),
-        account_id: account?.id ?? "",
-        kind,
+        account_id: account.id,
+        kind: account.kind,
         level,
         event,
         detail: detail ?? null,
@@ -215,28 +236,29 @@ export class ChannelHub {
     }
   }
 
-  upsertWechat(input: {
-    label?: string;
-    appId?: string;
-    appSecret?: string;
-    token?: string;
-    aesKey?: string | null;
-    enabled?: boolean;
-  }): ChannelPublic {
-    const current = this.db.channels.getByKind(KIND);
+  upsertWechat(
+    userId: string,
+    input: {
+      label?: string;
+      appId?: string;
+      appSecret?: string;
+      token?: string;
+      aesKey?: string | null;
+      enabled?: boolean;
+    },
+  ): ChannelPublic {
+    const current = this.db.channels.getByUserKind(userId, KIND);
     const appId = input.appId !== undefined ? input.appId.trim() : (current?.app_id ?? "");
     const token = input.token !== undefined ? input.token.trim() : (current?.token ?? "");
     const secret =
-      input.appSecret !== undefined
-        ? input.appSecret.trim() || null
-        : (current?.app_secret ?? null);
-    const aes =
-      input.aesKey !== undefined ? (input.aesKey?.trim() || null) : (current?.aes_key ?? null);
+      input.appSecret !== undefined ? input.appSecret.trim() || null : (current?.app_secret ?? null);
+    const aes = input.aesKey !== undefined ? (input.aesKey?.trim() || null) : (current?.aes_key ?? null);
     const enabled = input.enabled === undefined ? (current?.enabled ?? 0) : input.enabled ? 1 : 0;
     if (enabled && !token) throw new Error("token required");
     const label = (input.label ?? current?.label ?? "WeChat MP").trim() || "WeChat MP";
     this.db.channels.upsertByKind({
       id: current?.id ?? newChannelId(),
+      user_id: userId,
       kind: KIND,
       label,
       app_id: appId,
@@ -248,18 +270,19 @@ export class ChannelHub {
       base_url: current?.base_url ?? null,
       sync_buf: current?.sync_buf ?? null,
     });
-    this.accessToken = undefined;
-    if (input.enabled !== undefined) this.note(KIND, "info", enabled ? "enabled" : "disabled");
-    return this.publicWechat()!;
+    this.accessTokens.delete(appId);
+    const row = this.db.channels.getByUserKind(userId, KIND);
+    if (input.enabled !== undefined) this.log(row, "info", enabled ? "enabled" : "disabled");
+    return this.publicWechat(userId)!;
   }
 
   mintBindCode(userId: string): { code: string; expiresAt: number } {
     const account =
-      this.enabledAccount() ??
-      this.enabledBot() ??
-      this.enabledKind(KIND_TG) ??
-      this.enabledKind(KIND_FS) ??
-      this.enabledKind(KIND_DD);
+      this.enabledFor(userId, KIND) ??
+      this.enabledFor(userId, KIND_BOT) ??
+      this.enabledFor(userId, KIND_TG) ??
+      this.enabledFor(userId, KIND_FS) ??
+      this.enabledFor(userId, KIND_DD);
     if (!account) throw new Error("no channel is enabled");
     const code = newCode();
     const expiresAt = this.now() + BIND_TTL_MS;
@@ -272,26 +295,27 @@ export class ChannelHub {
     wechatBot: { bound: boolean; peerMasked?: string; connected: boolean };
     enabled: boolean;
   } {
-    const mp = this.bindingOn(KIND, userId);
-    const bot = this.enabledBot();
-    const botBind = this.bindingOn(KIND_BOT, userId);
+    const mp = this.bindingOn(userId, KIND);
+    const bot = this.enabledFor(userId, KIND_BOT);
+    const botBind = this.bindingOn(userId, KIND_BOT);
     return {
       wechat: mp,
       wechatBot: { ...botBind, connected: Boolean(bot?.token && bot.base_url) },
-      enabled: Boolean(this.enabledAccount() || bot),
+      enabled: Boolean(this.enabledFor(userId, KIND) || bot),
     };
   }
 
   unbind(userId: string): void {
-    for (const kind of [KIND, KIND_BOT]) {
-      const account = this.db.channels.getByKind(kind);
+    for (const kind of [KIND, KIND_BOT, KIND_TG, KIND_FS, KIND_DD]) {
+      const account = this.db.channels.getByUserKind(userId, kind);
       if (account) this.db.channels.deleteBindingByUser(account.id, userId);
     }
   }
 
-  publicWechatBot(): WechatBotPublic | null {
-    const row = this.db.channels.getByKind(KIND_BOT);
+  publicWechatBot(userId: string): WechatBotPublic | null {
+    const row = this.db.channels.getByUserKind(userId, KIND_BOT);
     if (!row) return null;
+    const mine = this.db.channels.getBindingByUser(row.id, userId);
     return {
       id: row.id,
       kind: KIND_BOT,
@@ -299,6 +323,7 @@ export class ChannelHub {
       connected: Boolean(row.token && row.base_url && row.enabled === 1),
       botId: row.app_id,
       bound: this.db.channels.listBindings(row.id).length,
+      peerMasked: mine ? maskPeer(mine.peer_id) : undefined,
     };
   }
 
@@ -319,6 +344,7 @@ export class ChannelHub {
   async pollBotQr(
     sessionKey: string,
     verifyCode?: string,
+    userId?: string,
   ): Promise<{
     status: string;
     qrcodeUrl?: string;
@@ -329,6 +355,9 @@ export class ChannelHub {
     const session = this.qrSessions.get(sessionKey);
     if (!session || this.now() - session.startedAt > 8 * 60_000) {
       this.qrSessions.delete(sessionKey);
+      return { status: "expired", message: "二维码已过期，请重新生成。" };
+    }
+    if (userId && session.userId !== userId) {
       return { status: "expired", message: "二维码已过期，请重新生成。" };
     }
     if (verifyCode) session.verifyCode = verifyCode;
@@ -345,9 +374,10 @@ export class ChannelHub {
         this.qrSessions.delete(sessionKey);
         return { status: "error", message: "登录成功但未返回 bot token。" };
       }
-      const current = this.db.channels.getByKind(KIND_BOT);
+      const current = this.db.channels.getByUserKind(session.userId, KIND_BOT);
       this.db.channels.upsertByKind({
         id: current?.id ?? newChannelId(),
+        user_id: session.userId,
         kind: KIND_BOT,
         label: "WeChat Bot",
         app_id: st.ilink_bot_id,
@@ -359,7 +389,7 @@ export class ChannelHub {
         base_url: (st.baseurl || ILINK_QR_BASE).replace(/\/$/, ""),
         sync_buf: null,
       });
-      const account = this.db.channels.getByKind(KIND_BOT)!;
+      const account = this.db.channels.getByUserKind(session.userId, KIND_BOT)!;
       if (st.ilink_user_id) {
         this.db.channels.insertBinding({
           id: newBindingId(),
@@ -370,9 +400,9 @@ export class ChannelHub {
         });
       }
       this.qrSessions.delete(sessionKey);
-      this.restartBotMonitor();
-      this.note(KIND_BOT, "info", "login", st.ilink_bot_id);
-      return { status: "confirmed", connected: true, wechatBot: this.publicWechatBot()! };
+      this.restartAllBots();
+      this.log(account, "info", "login", st.ilink_bot_id);
+      return { status: "confirmed", connected: true, wechatBot: this.publicWechatBot(session.userId)! };
     }
     if (st.status === "expired" || st.status === "binded_redirect") {
       this.qrSessions.delete(sessionKey);
@@ -380,8 +410,8 @@ export class ChannelHub {
     return { status: st.status, qrcodeUrl: session.qrcodeUrl };
   }
 
-  logoutBot(): void {
-    const current = this.db.channels.getByKind(KIND_BOT);
+  logoutBot(userId: string): void {
+    const current = this.db.channels.getByUserKind(userId, KIND_BOT);
     if (!current) return;
     this.db.channels.upsertByKind({
       ...current,
@@ -390,13 +420,15 @@ export class ChannelHub {
       base_url: null,
       sync_buf: null,
     });
-    this.botAbort?.abort();
-    this.botAbort = undefined;
+    const ac = this.botLoops.get(current.id);
+    ac?.abort();
+    this.botLoops.delete(current.id);
   }
 
-  publicGeneric(kind: string): GenericChannelPublic | null {
-    const row = this.db.channels.getByKind(kind);
+  publicGeneric(kind: string, userId: string): GenericChannelPublic | null {
+    const row = this.db.channels.getByUserKind(userId, kind);
     if (!row) return null;
+    const mine = this.db.channels.getBindingByUser(row.id, userId);
     return {
       kind,
       enabled: row.enabled === 1,
@@ -406,11 +438,13 @@ export class ChannelHub {
       tokenPrefix: maskSecret(row.token),
       webhook: row.base_url || undefined,
       bound: this.db.channels.listBindings(row.id).length,
+      peerMasked: mine ? maskPeer(mine.peer_id) : undefined,
     };
   }
 
   upsertGeneric(
     kind: string,
+    userId: string,
     input: {
       label?: string;
       appId?: string;
@@ -420,7 +454,7 @@ export class ChannelHub {
       webhook?: string;
     },
   ): GenericChannelPublic {
-    const current = this.db.channels.getByKind(kind);
+    const current = this.db.channels.getByUserKind(userId, kind);
     const token = input.token !== undefined ? input.token.trim() : (current?.token ?? "");
     const secret =
       input.appSecret !== undefined ? input.appSecret.trim() || null : (current?.app_secret ?? null);
@@ -433,6 +467,7 @@ export class ChannelHub {
     const labels: Record<string, string> = { telegram: "Telegram", feishu: "Feishu", dingtalk: "DingTalk" };
     this.db.channels.upsertByKind({
       id: current?.id ?? newChannelId(),
+      user_id: userId,
       kind,
       label: input.label ?? current?.label ?? labels[kind] ?? kind,
       app_id: appId,
@@ -444,18 +479,23 @@ export class ChannelHub {
       base_url: webhook,
       sync_buf: current?.sync_buf ?? null,
     });
-    if (kind === KIND_TG) this.restartTelegram();
-    if (input.enabled !== undefined) this.note(kind, "info", enabled ? "enabled" : "disabled");
-    return this.publicGeneric(kind)!;
+    if (kind === KIND_TG) this.restartAllTelegram();
+    const row = this.db.channels.getByUserKind(userId, kind);
+    if (input.enabled !== undefined) this.log(row, "info", enabled ? "enabled" : "disabled");
+    return this.publicGeneric(kind, userId)!;
   }
 
   async handleFeishu(body: unknown): Promise<unknown> {
     const challenge = feishuChallenge(body);
     if (challenge) return { challenge };
-    const account = this.db.channels.getByKind(KIND_FS);
-    if (!account || account.enabled !== 1) return {};
-    const presented = (body as { token?: string; header?: { token?: string } }).token
-      ?? (body as { header?: { token?: string } }).header?.token;
+    const presented =
+      (body as { token?: string; header?: { token?: string } }).token ??
+      (body as { header?: { token?: string } }).header?.token;
+    const accounts = this.db.channels.listEnabled(KIND_FS);
+    const account =
+      accounts.find((a) => a.token && presented && feishuTokenOk(a.token, presented)) ??
+      (accounts.length === 1 && !accounts[0]!.token ? accounts[0] : undefined);
+    if (!account) return {};
     if (account.token && !feishuTokenOk(account.token, presented)) return {};
     const msg = feishuText(body);
     if (!msg) return {};
@@ -469,7 +509,7 @@ export class ChannelHub {
           text: reply,
         });
       } catch (err) {
-        this.note(KIND_FS, "error", "send", err instanceof Error ? err.message : String(err));
+        this.log(account, "error", "send", err instanceof Error ? err.message : String(err));
       }
     }
     return {};
@@ -479,11 +519,19 @@ export class ChannelHub {
     headers: { timestamp?: string; sign?: string },
     body: unknown,
   ): Promise<unknown> {
-    const account = this.db.channels.getByKind(KIND_DD);
-    if (!account || account.enabled !== 1) return {};
-    if (account.app_secret && !dingtalkSignOk(account.app_secret, headers.timestamp ?? "", headers.sign ?? "")) {
-      return { msgtype: "text", text: { content: "sign mismatch" } };
+    const accounts = this.db.channels.listEnabled(KIND_DD);
+    let account: ChannelAccountRow | undefined;
+    for (const row of accounts) {
+      if (row.app_secret) {
+        if (dingtalkSignOk(row.app_secret, headers.timestamp ?? "", headers.sign ?? "")) {
+          account = row;
+          break;
+        }
+        continue;
+      }
+      if (accounts.length === 1) account = row;
     }
+    if (!account) return {};
     const msg = dingtalkText(body);
     if (!msg) return {};
     const reply = await this.handlePeerText(account.id, msg.peerId, msg.text);
@@ -492,54 +540,61 @@ export class ChannelHub {
   }
 
   verifyGet(query: { signature?: string; timestamp?: string; nonce?: string; echostr?: string }): string | undefined {
-    const account = this.enabledAccount();
-    if (!account) return undefined;
-    if (
-      !wechatSignatureOk(
-        account.token,
-        query.timestamp ?? "",
-        query.nonce ?? "",
-        query.signature ?? "",
-      )
-    ) {
-      return undefined;
+    for (const account of this.db.channels.listEnabled(KIND)) {
+      if (!account.token) continue;
+      if (
+        wechatSignatureOk(
+          account.token,
+          query.timestamp ?? "",
+          query.nonce ?? "",
+          query.signature ?? "",
+        )
+      ) {
+        return query.echostr ?? "";
+      }
     }
-    return query.echostr ?? "";
+    return undefined;
   }
 
   async handlePost(
     query: { signature?: string; timestamp?: string; nonce?: string; msg_signature?: string; encrypt_type?: string },
     rawXml: string,
   ): Promise<string> {
-    const account = this.enabledAccount();
-    if (!account) return "success";
-    let xml = rawXml;
     const encryptType = (query.encrypt_type ?? "").toLowerCase();
     const encrypted = xmlField(rawXml, "Encrypt");
-    if (encrypted && (encryptType === "aes" || account.aes_key)) {
-      const msgSig = query.msg_signature ?? query.signature ?? "";
-      if (!wechatSignatureOk(account.token, query.timestamp ?? "", query.nonce ?? "", msgSig, encrypted)) {
-        return "success";
+    for (const account of this.db.channels.listEnabled(KIND)) {
+      if (!account.token) continue;
+      let xml = rawXml;
+      if (encrypted && (encryptType === "aes" || account.aes_key)) {
+        const msgSig = query.msg_signature ?? query.signature ?? "";
+        if (!wechatSignatureOk(account.token, query.timestamp ?? "", query.nonce ?? "", msgSig, encrypted)) {
+          continue;
+        }
+        if (!account.aes_key) continue;
+        try {
+          xml = decryptWechatMsg(account.aes_key, account.app_id, encrypted);
+        } catch {
+          continue;
+        }
+      } else if (
+        !wechatSignatureOk(account.token, query.timestamp ?? "", query.nonce ?? "", query.signature ?? "")
+      ) {
+        continue;
       }
-      if (!account.aes_key) return "success";
-      xml = decryptWechatMsg(account.aes_key, account.app_id, encrypted);
-    } else if (
-      !wechatSignatureOk(account.token, query.timestamp ?? "", query.nonce ?? "", query.signature ?? "")
-    ) {
-      return "success";
-    }
 
-    const msg = parseWechatXml(xml);
-    const reply = await this.dispatchMp(account.id, msg);
-    if (!reply) return "success";
-    const plain = wechatTextReply(msg.toUser, msg.fromUser, reply, this.now());
-    if (account.aes_key && (encryptType === "aes" || encrypted)) {
-      const nonce = query.nonce || "nonce";
-      const timestamp = query.timestamp || String(Math.floor(this.now() / 1000));
-      const enc = encryptWechatMsg(account.aes_key, account.app_id, plain);
-      return wechatEncryptedEnvelope({ token: account.token, timestamp, nonce, encrypt: enc });
+      const msg = parseWechatXml(xml);
+      const reply = await this.dispatchMp(account.id, msg);
+      if (!reply) return "success";
+      const plain = wechatTextReply(msg.toUser, msg.fromUser, reply, this.now());
+      if (account.aes_key && (encryptType === "aes" || encrypted)) {
+        const nonce = query.nonce || "nonce";
+        const timestamp = query.timestamp || String(Math.floor(this.now() / 1000));
+        const enc = encryptWechatMsg(account.aes_key, account.app_id, plain);
+        return wechatEncryptedEnvelope({ token: account.token, timestamp, nonce, encrypt: enc });
+      }
+      return plain;
     }
-    return plain;
+    return "success";
   }
 
   async notify(job: JobSummary): Promise<void> {
@@ -549,30 +604,33 @@ export class ChannelHub {
     } catch {
       return;
     }
-    const mp = this.enabledAccount();
+    const ownerId = job.ownerId ?? this.db.users.siteDeskId();
+    if (!ownerId) return;
+
+    const mp = this.enabledFor(ownerId, KIND);
     if (mp && this.db.channels.listBindings(mp.id).length > 0 && !(mp.app_id && mp.app_secret)) {
-      this.lastPushError = "missing AppId/AppSecret";
+      this.lastPush.set(mp.id, "missing AppId/AppSecret");
     }
     if (mp?.app_id && mp.app_secret) {
       for (const b of this.db.channels.listBindings(mp.id)) {
-        if ((job.ownerId ?? this.db.users.siteDeskId()) !== b.user_id) continue;
+        if (b.user_id !== ownerId) continue;
         this.lastJob.set(b.peer_id, job.id);
         try {
           await this.sendCustom(mp.app_id, mp.app_secret, b.peer_id, text);
-          this.lastPushError = undefined;
-          this.note(KIND, "info", "push", `ok ${b.peer_id.slice(0, 8)}`);
+          this.lastPush.delete(mp.id);
+          this.log(mp, "info", "push", `ok ${b.peer_id.slice(0, 8)}`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          this.lastPushError = msg;
-          this.note(KIND, "error", "push", msg);
+          this.lastPush.set(mp.id, msg);
+          this.log(mp, "error", "push", msg);
           console.warn(`wechat mp push failed peer=${b.peer_id}: ${msg}`);
         }
       }
     }
-    const bot = this.enabledBot();
+    const bot = this.enabledFor(ownerId, KIND_BOT);
     if (bot?.token && bot.base_url) {
       for (const b of this.db.channels.listBindings(bot.id)) {
-        if ((job.ownerId ?? this.db.users.siteDeskId()) !== b.user_id) continue;
+        if (b.user_id !== ownerId) continue;
         this.lastJob.set(b.peer_id, job.id);
         try {
           await sendBotText(this.ilinkFetch, {
@@ -587,54 +645,50 @@ export class ChannelHub {
         }
       }
     }
-    await this.notifyGeneric(KIND_TG, job.id, async (peer) => {
-      const row = this.db.channels.getByKind(KIND_TG);
-      if (!row?.token) return;
+    await this.notifyOwned(KIND_TG, ownerId, job.id, async (row, peer) => {
+      if (!row.token) return;
       await telegramSend(this.wxFetch, row.token, peer, text);
     });
-    await this.notifyGeneric(KIND_FS, job.id, async (peer) => {
-      const row = this.db.channels.getByKind(KIND_FS);
-      if (!row?.app_id || !row.app_secret) return;
+    await this.notifyOwned(KIND_FS, ownerId, job.id, async (row, peer) => {
+      if (!row.app_id || !row.app_secret) return;
       await feishuSend(this.wxFetch, { appId: row.app_id, appSecret: row.app_secret, openId: peer, text });
     });
-    await this.notifyGeneric(KIND_DD, job.id, async () => {
-      const row = this.db.channels.getByKind(KIND_DD);
-      if (!row?.base_url) return;
+    await this.notifyOwned(KIND_DD, ownerId, job.id, async (row) => {
+      if (!row.base_url) return;
       await dingtalkWebhookSend(this.wxFetch, row.base_url, text);
     });
   }
 
-  private async notifyGeneric(
+  private async notifyOwned(
     kind: string,
+    ownerId: string,
     jobId: string,
-    send: (peer: string) => Promise<void>,
+    send: (row: ChannelAccountRow, peer: string) => Promise<void>,
   ): Promise<void> {
-    let row;
+    let row: ChannelAccountRow | null;
     try {
-      row = this.db.channels.getByKind(kind);
+      row = this.db.channels.getByUserKind(ownerId, kind);
     } catch {
       return;
     }
     if (!row || row.enabled !== 1) return;
-    const ownerId =
-      this.engine.list().find((j) => j.id === jobId)?.ownerId ?? this.db.users.siteDeskId();
-    const bindings = this.db.channels.listBindings(row.id).filter((b) => !ownerId || b.user_id === ownerId);
+    const bindings = this.db.channels.listBindings(row.id).filter((b) => b.user_id === ownerId);
     if (kind === KIND_DD && row.base_url && bindings.length === 0) {
       try {
-        await send("");
-        this.note(kind, "info", "push", "webhook");
+        await send(row, "");
+        this.log(row, "info", "push", "webhook");
       } catch (err) {
-        this.note(kind, "error", "push", err instanceof Error ? err.message : String(err));
+        this.log(row, "error", "push", err instanceof Error ? err.message : String(err));
       }
       return;
     }
     for (const b of bindings) {
       this.lastJob.set(b.peer_id, jobId);
       try {
-        await send(b.peer_id);
-        this.note(kind, "info", "push", b.peer_id.slice(0, 12));
+        await send(row, b.peer_id);
+        this.log(row, "info", "push", b.peer_id.slice(0, 12));
       } catch (err) {
-        this.note(kind, "error", "push", err instanceof Error ? err.message : String(err));
+        this.log(row, "error", "push", err instanceof Error ? err.message : String(err));
       }
     }
   }
@@ -648,66 +702,74 @@ export class ChannelHub {
     return `新会话 ${who}${kind}\n${preview || "(no text)"}\n回复这条消息即可作答。多条会话时先发「列表」。\n${desk}`;
   }
 
-  private enabledAccount() {
+  private enabledFor(userId: string, kind: string): ChannelAccountRow | null {
     try {
-      const row = this.db.channels.getByKind(KIND);
-      if (!row || row.enabled !== 1 || !row.token) return null;
-      return row;
-    } catch {
-      return null;
-    }
-  }
-
-  private enabledKind(kind: string) {
-    try {
-      const row = this.db.channels.getByKind(kind);
+      const row = this.db.channels.getByUserKind(userId, kind);
       if (!row || row.enabled !== 1) return null;
+      if (kind === KIND && !row.token) return null;
+      if (kind === KIND_BOT && !(row.token && row.base_url)) return null;
       return row;
     } catch {
       return null;
     }
   }
 
-  private enabledBot() {
-    try {
-      const row = this.db.channels.getByKind(KIND_BOT);
-      if (!row || row.enabled !== 1 || !row.token || !row.base_url) return null;
-      return row;
-    } catch {
-      return null;
-    }
-  }
-
-  private bindingOn(kind: string, userId: string): { bound: boolean; peerMasked?: string } {
-    const account = this.db.channels.getByKind(kind);
+  private bindingOn(userId: string, kind: string): { bound: boolean; peerMasked?: string } {
+    const account = this.db.channels.getByUserKind(userId, kind);
     if (!account) return { bound: false };
     const row = this.db.channels.getBindingByUser(account.id, userId);
     if (!row) return { bound: false };
     return { bound: true, peerMasked: maskPeer(row.peer_id) };
   }
 
-  private restartBotMonitor(): void {
-    this.botAbort?.abort();
-    this.botAbort = undefined;
-    const bot = this.enabledBot();
-    if (!bot) return;
-    this.botAbort = new AbortController();
-    void this.botLoop(bot.id, this.botAbort.signal);
+  private restartAllBots(): void {
+    let live: ChannelAccountRow[] = [];
+    try {
+      live = this.db.channels.listEnabled(KIND_BOT).filter((b) => b.token && b.base_url);
+    } catch {
+      return;
+    }
+    const ids = new Set(live.map((b) => b.id));
+    for (const [id, ac] of this.botLoops) {
+      if (!ids.has(id)) {
+        ac.abort();
+        this.botLoops.delete(id);
+      }
+    }
+    for (const row of live) {
+      if (this.botLoops.has(row.id)) continue;
+      const ac = new AbortController();
+      this.botLoops.set(row.id, ac);
+      void this.botLoop(row.id, ac.signal);
+    }
   }
 
-  private restartTelegram(): void {
-    this.tgAbort?.abort();
-    this.tgAbort = undefined;
-    const row = this.db.channels.getByKind(KIND_TG);
-    if (!row || row.enabled !== 1 || !row.token) return;
-    this.tgAbort = new AbortController();
-    const token = row.token;
-    const accountId = row.id;
-    void telegramLoop(this.wxFetch, {
-      token,
-      abort: this.tgAbort.signal,
-      onText: async (peer, text) => this.handlePeerText(accountId, peer, text),
-    });
+  private restartAllTelegram(): void {
+    let live: ChannelAccountRow[] = [];
+    try {
+      live = this.db.channels.listEnabled(KIND_TG).filter((b) => Boolean(b.token));
+    } catch {
+      return;
+    }
+    const ids = new Set(live.map((b) => b.id));
+    for (const [id, ac] of this.tgLoops) {
+      if (!ids.has(id)) {
+        ac.abort();
+        this.tgLoops.delete(id);
+      }
+    }
+    for (const row of live) {
+      if (this.tgLoops.has(row.id)) continue;
+      const ac = new AbortController();
+      this.tgLoops.set(row.id, ac);
+      const token = row.token;
+      const accountId = row.id;
+      void telegramLoop(this.wxFetch, {
+        token,
+        abort: ac.signal,
+        onText: async (peer, text) => this.handlePeerText(accountId, peer, text),
+      });
+    }
   }
 
   private async botLoop(accountId: string, abort: AbortSignal): Promise<void> {
@@ -718,9 +780,13 @@ export class ChannelHub {
       try {
         account = this.db.channels.getById(accountId);
       } catch {
+        this.botLoops.delete(accountId);
         return;
       }
-      if (!account?.token || !account.base_url || account.enabled !== 1) return;
+      if (!account?.token || !account.base_url || account.enabled !== 1) {
+        this.botLoops.delete(accountId);
+        return;
+      }
       try {
         const resp = await getUpdates(this.ilinkFetch, {
           baseUrl: account.base_url,
@@ -769,6 +835,7 @@ export class ChannelHub {
         if (failures >= 3) failures = 0;
       }
     }
+    this.botLoops.delete(accountId);
   }
 
   private async dispatchMp(
@@ -776,7 +843,7 @@ export class ChannelHub {
     msg: { fromUser: string; msgType: string; content: string; event: string },
   ): Promise<string | undefined> {
     if (msg.msgType === "event" && (msg.event === "subscribe" || msg.event === "scan")) {
-      return "发送绑定码（控制台 Channels 里复制）以绑定操作者。绑定后新会话会推到这里，直接回复即可。";
+      return "发送绑定码（控制台连接器里复制）以绑定操作者。绑定后新会话会推到这里，直接回复即可。";
     }
     if (msg.msgType !== "text" || !msg.content) return undefined;
     return this.handlePeerText(accountId, msg.fromUser, msg.content.trim());
@@ -791,11 +858,11 @@ export class ChannelHub {
 
     const binding = this.db.channels.getBindingByPeer(accountId, fromUser);
     if (!binding) {
-      return "尚未绑定。打开 /console 设置里的 Channels，生成绑定码，发到这里。";
+      return "尚未绑定。打开 /console 设置里的连接器，生成绑定码，发到这里。";
     }
     const user = this.db.users.getById(binding.user_id);
     if (!user || user.disabled || !user.can_reply) {
-      return "这个微信绑定的账号没有回复权，或已被停用。";
+      return "这个绑定的账号没有回复权，或已被停用。";
     }
 
     const lower = text.toLowerCase();
@@ -827,7 +894,7 @@ export class ChannelHub {
       await this.engine.completeFromTest(job.id, [{ type: "text", text: body }], { sessionId: user.id });
       this.lastJob.delete(fromUser);
       const acc = this.db.channels.getById(accountId);
-      this.note(acc?.kind || KIND, "info", "reply", body.slice(0, 80));
+      this.log(acc, "info", "reply", body.slice(0, 80));
       return "已回复到会话。";
     } catch (err) {
       return err instanceof Error ? err.message : "回复失败。";
@@ -852,10 +919,10 @@ export class ChannelHub {
       created_at: this.now(),
     });
     const acc = this.db.channels.getById(accountId);
-    this.note(acc?.kind || KIND, "info", "bind", user.username);
+    this.log(acc, "info", "bind", user.username);
     return `已绑定 ${user.username}。
-回复位置：微信里打开本公众号的对话（不是控制台，也不是别的 Bot）。
-订阅号通常不能主动推送。有新会话时请在这里发「列表」，然后直接打字回复。`;
+回复位置：用你绑定的这个连接器对话（微信 Bot / 公众号 / 飞书等），不是别人的。
+有新会话时请在这里发「列表」，然后直接打字回复。`;
   }
 
   private listText(ownerId: string): string {
@@ -894,17 +961,18 @@ export class ChannelHub {
   }
 
   private async token(appId: string, secret: string): Promise<string> {
-    if (this.accessToken && this.accessToken.expiresAt > this.now() + 60_000) return this.accessToken.value;
+    const cached = this.accessTokens.get(appId);
+    if (cached && cached.expiresAt > this.now() + 60_000) return cached.value;
     const res = await this.wxFetch(
       `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${encodeURIComponent(appId)}&secret=${encodeURIComponent(secret)}`,
       { signal: AbortSignal.timeout(10_000) },
     );
     const body = (await res.json()) as { access_token?: string; expires_in?: number; errcode?: number };
     if (!body.access_token) throw new Error(`wechat token ${body.errcode ?? res.status}`);
-    this.accessToken = {
+    this.accessTokens.set(appId, {
       value: body.access_token,
       expiresAt: this.now() + Math.max(60, (body.expires_in ?? 7200) - 120) * 1000,
-    };
+    });
     return body.access_token;
   }
 }

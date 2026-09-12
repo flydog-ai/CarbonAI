@@ -246,13 +246,16 @@ describe("visitors", () => {
 });
 
 describe("channels", () => {
-  test("upsert wechat account and bind peer to user", async () => {
+  test("upsert wechat account per user and bind peer to that user", async () => {
     const db = openDatabase(tmp());
     const user = await newUser({ username: "op", password: "password1", canReply: true });
+    const other = await newUser({ username: "ada", password: "password1", canReply: true });
     db.users.insert(user);
+    db.users.insert(other);
     const id = newChannelId();
     db.channels.upsertByKind({
       id,
+      user_id: user.id,
       kind: "wechat_mp",
       label: "WeChat MP",
       app_id: "wxapp",
@@ -266,6 +269,7 @@ describe("channels", () => {
     });
     db.channels.upsertByKind({
       id: newChannelId(),
+      user_id: user.id,
       kind: "wechat_mp",
       label: "WeChat MP",
       app_id: "wxapp2",
@@ -277,14 +281,30 @@ describe("channels", () => {
       base_url: null,
       sync_buf: null,
     });
-    expect(db.channels.getByKind("wechat_mp")?.app_id).toBe("wxapp2");
-    const account = db.channels.getByKind("wechat_mp")!;
+    expect(db.channels.getByUserKind(user.id, "wechat_mp")?.app_id).toBe("wxapp2");
+    db.channels.upsertByKind({
+      id: newChannelId(),
+      user_id: other.id,
+      kind: "wechat_mp",
+      label: "WeChat MP",
+      app_id: "wx-ada",
+      app_secret: "secret",
+      token: "tok-ada",
+      aes_key: null,
+      enabled: 1,
+      created_at: 3,
+      base_url: null,
+      sync_buf: null,
+    });
+    expect(db.channels.getByUserKind(other.id, "wechat_mp")?.app_id).toBe("wx-ada");
+    expect(db.channels.getByUserKind(user.id, "wechat_mp")?.app_id).toBe("wxapp2");
+    const account = db.channels.getByUserKind(user.id, "wechat_mp")!;
     db.channels.insertBinding({
       id: newBindingId(),
       account_id: account.id,
       user_id: user.id,
       peer_id: "openid-a",
-      created_at: 3,
+      created_at: 4,
     });
     expect(db.channels.getBindingByPeer(account.id, "openid-a")?.user_id).toBe(user.id);
     db.close();

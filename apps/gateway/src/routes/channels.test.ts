@@ -170,4 +170,82 @@ describe("wechat channel", () => {
       expect(engine.get(job.id).status).toBe("pending");
     });
   });
+
+  test("each user owns a separate wechat token; jobs stay on the creator desk", async () => {
+    await withSrv(async (url, engine) => {
+      const login = await fetch(`${url}/api/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "password1" }),
+      });
+      const adminAuth = { cookie: cookieFrom(login, "carbon_user") };
+      await fetch(`${url}/api/admin/channels`, {
+        method: "PATCH",
+        headers: { ...adminAuth, "content-type": "application/json" },
+        body: JSON.stringify({ token: "tok-admin", enabled: true }),
+      });
+      const adminCode = (await (
+        await fetch(`${url}/api/me/channels/bind-code`, { method: "POST", headers: adminAuth })
+      ).json()) as { code: string };
+      const ts = "1";
+      const nonce = "n";
+      await fetch(`${url}/hooks/wechat?signature=${sign("tok-admin", ts, nonce)}&timestamp=${ts}&nonce=${nonce}`, {
+        method: "POST",
+        body: textXml("openid-admin", adminCode.code),
+      });
+
+      const reg = await fetch(`${url}/api/auth/register`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "ada", password: "password1" }),
+      });
+      expect(reg.status).toBe(201);
+      const ada = (await reg.json()) as { apiKey: string };
+      const adaAuth = { cookie: cookieFrom(reg, "carbon_user") };
+      const saved = await fetch(`${url}/api/me/channels`, {
+        method: "PATCH",
+        headers: { ...adaAuth, "content-type": "application/json" },
+        body: JSON.stringify({ token: "tok-ada", enabled: true }),
+      });
+      expect(saved.status).toBe(200);
+      const adaCode = (await (
+        await fetch(`${url}/api/me/channels/bind-code`, { method: "POST", headers: adaAuth })
+      ).json()) as { code: string };
+      await fetch(`${url}/hooks/wechat?signature=${sign("tok-ada", ts, nonce)}&timestamp=${ts}&nonce=${nonce}`, {
+        method: "POST",
+        body: textXml("openid-ada", adaCode.code),
+      });
+
+      const ping = await fetch(`${url}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": ada.apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "carbon-default",
+          max_tokens: 16,
+          stream: true,
+          messages: [{ role: "user", content: "ada wechat" }],
+        }),
+      });
+      expect(ping.status).toBe(200);
+      const adaJob = engine.list().find((j) => j.lastUserPreview.includes("ada wechat"))!;
+
+      const stranger = await fetch(
+        `${url}/hooks/wechat?signature=${sign("tok-admin", ts, nonce)}&timestamp=${ts}&nonce=${nonce}`,
+        { method: "POST", body: textXml("openid-admin", "admin should not take ada") },
+      );
+      expect(await stranger.text()).toContain("没有等待回复");
+      expect(engine.get(adaJob.id).status).toBe("pending");
+
+      const reply = await fetch(
+        `${url}/hooks/wechat?signature=${sign("tok-ada", ts, nonce)}&timestamp=${ts}&nonce=${nonce}`,
+        { method: "POST", body: textXml("openid-ada", "ada replies") },
+      );
+      expect(await reply.text()).toContain("已回复");
+      expect(engine.get(adaJob.id).status).toBe("completed");
+    });
+  });
 });

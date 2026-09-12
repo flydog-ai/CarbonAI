@@ -211,12 +211,26 @@ export function openDatabase(dataDir: string): CarbonDb {
   ensureColumn(sqlite, "users", "last_seen_at", "INTEGER");
   ensureColumn(sqlite, "channel_accounts", "base_url", "TEXT");
   ensureColumn(sqlite, "channel_accounts", "sync_buf", "TEXT");
+  migrateChannelAccounts(sqlite);
   return new CarbonDb(sqlite, dataDir);
 }
 
 function ensureColumn(sqlite: Database, table: string, name: string, spec: string): void {
   const cols = sqlite.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
   if (!cols.some((c) => c.name === name)) sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${spec}`);
+}
+
+/** Site-wide channel rows become the superadmin's; later rows are per user. */
+function migrateChannelAccounts(sqlite: Database): void {
+  ensureColumn(sqlite, "channel_accounts", "user_id", "TEXT NOT NULL DEFAULT ''");
+  const desk = sqlite
+    .query("SELECT id FROM users WHERE role = 'superadmin' AND disabled = 0 ORDER BY created_at ASC LIMIT 1")
+    .get() as { id: string } | null;
+  if (desk) {
+    sqlite.query("UPDATE channel_accounts SET user_id = ? WHERE user_id IS NULL OR user_id = ''").run(desk.id);
+  }
+  sqlite.exec("DROP INDEX IF EXISTS channel_accounts_kind");
+  sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS channel_accounts_user_kind ON channel_accounts(user_id, kind)");
 }
 
 export { RAW_INLINE_LIMIT };

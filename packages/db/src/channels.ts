@@ -20,21 +20,41 @@ export function newChannelEventId(): string {
 export class ChannelRepo {
   constructor(private readonly sqlite: Database) {}
 
-  getByKind(kind: string): ChannelAccountRow | null {
-    return (
-      (this.sqlite.query("SELECT * FROM channel_accounts WHERE kind = ?").get(kind) as ChannelAccountRow | null) ??
-      null
-    );
-  }
-
   getById(id: string): ChannelAccountRow | null {
     return (
       (this.sqlite.query("SELECT * FROM channel_accounts WHERE id = ?").get(id) as ChannelAccountRow | null) ?? null
     );
   }
 
+  getByUserKind(userId: string, kind: string): ChannelAccountRow | null {
+    return (
+      (this.sqlite
+        .query("SELECT * FROM channel_accounts WHERE user_id = ? AND kind = ?")
+        .get(userId, kind) as ChannelAccountRow | null) ?? null
+    );
+  }
+
+  listByKind(kind: string): ChannelAccountRow[] {
+    return this.sqlite
+      .query("SELECT * FROM channel_accounts WHERE kind = ? ORDER BY created_at ASC")
+      .all(kind) as ChannelAccountRow[];
+  }
+
+  listEnabled(kind: string): ChannelAccountRow[] {
+    return this.sqlite
+      .query("SELECT * FROM channel_accounts WHERE kind = ? AND enabled = 1 ORDER BY created_at ASC")
+      .all(kind) as ChannelAccountRow[];
+  }
+
+  listByUser(userId: string): ChannelAccountRow[] {
+    return this.sqlite
+      .query("SELECT * FROM channel_accounts WHERE user_id = ? ORDER BY created_at ASC")
+      .all(userId) as ChannelAccountRow[];
+  }
+
   upsertByKind(row: ChannelAccountRow): void {
-    const existing = this.getByKind(row.kind);
+    if (!row.user_id) throw new Error("channel account requires user_id");
+    const existing = this.getByUserKind(row.user_id, row.kind);
     if (existing) {
       this.sqlite
         .query(
@@ -58,11 +78,12 @@ export class ChannelRepo {
     }
     this.sqlite
       .query(
-        `INSERT INTO channel_accounts (id, kind, label, app_id, app_secret, token, aes_key, enabled, created_at, base_url, sync_buf)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO channel_accounts (id, user_id, kind, label, app_id, app_secret, token, aes_key, enabled, created_at, base_url, sync_buf)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         row.id,
+        row.user_id,
         row.kind,
         row.label,
         row.app_id,
@@ -128,16 +149,24 @@ export class ChannelRepo {
       .run(row.id, row.account_id, row.kind, row.level, row.event, row.detail, row.created_at);
     this.sqlite
       .query(
-        `DELETE FROM channel_events WHERE kind = ? AND id NOT IN (
-           SELECT id FROM channel_events WHERE kind = ? ORDER BY created_at DESC LIMIT 80
+        `DELETE FROM channel_events WHERE account_id = ? AND id NOT IN (
+           SELECT id FROM channel_events WHERE account_id = ? ORDER BY created_at DESC LIMIT 80
          )`,
       )
-      .run(row.kind, row.kind);
+      .run(row.account_id, row.account_id);
   }
 
   listEvents(kind: string, limit = 30): ChannelEventRow[] {
     return this.sqlite
       .query("SELECT * FROM channel_events WHERE kind = ? ORDER BY created_at DESC LIMIT ?")
       .all(kind, limit) as ChannelEventRow[];
+  }
+
+  listEventsForUser(userId: string, kind: string, limit = 30): ChannelEventRow[] {
+    const account = this.getByUserKind(userId, kind);
+    if (!account) return [];
+    return this.sqlite
+      .query("SELECT * FROM channel_events WHERE account_id = ? ORDER BY created_at DESC LIMIT ?")
+      .all(account.id, limit) as ChannelEventRow[];
   }
 }
