@@ -7,6 +7,7 @@ export type ClientIdentity = {
   keyId: string;
   userId?: string;
   visitorId?: string;
+  keyPrefix?: string;
 };
 
 function sha256(value: string): Buffer {
@@ -53,24 +54,24 @@ export function verifyClientKey(
       if (row.revoked_at == null) {
         const user = db.users.getById(row.user_id);
         if (user && !user.disabled) {
-          return { label: user.username, keyId: row.id, userId: user.id };
+          return { label: user.username, keyId: row.id, userId: user.id, keyPrefix: apiKeyPrefix(presented) };
         }
       }
       return undefined;
     }
     const visitor = db.visitors.getByKeyHash(presentedHash.toString("hex"));
     if (visitor) {
-      return { label: visitor.short_id, keyId: visitor.id, visitorId: visitor.id };
+      return { label: visitor.short_id, keyId: visitor.id, visitorId: visitor.id, keyPrefix: apiKeyPrefix(presented) };
     }
   }
   const keys = cfg.auth.apiKeys.filter((k) => k.key.length > 0);
   if (keys.length === 0 && !db) {
-    return { label: "local", keyId: "local" };
+    return { label: "local", keyId: "local", keyPrefix: apiKeyPrefix(presented) };
   }
   for (const key of keys) {
     const stored = sha256(key.key);
     if (stored.length === presentedHash.length && timingSafeEqual(stored, presentedHash)) {
-      return { label: key.label, keyId: key.label };
+      return { label: key.label, keyId: key.label, keyPrefix: apiKeyPrefix(presented) };
     }
   }
   return undefined;

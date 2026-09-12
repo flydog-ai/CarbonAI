@@ -40,7 +40,7 @@ export function decorateJobs(db: CarbonDb, jobs: JobSummary[], now = Date.now())
       clientIp: job.clientIp ?? visitor?.ip ?? undefined,
       lastSeenAt,
       presence: presenceOf({ live: isLive(job.status), lastSeenAt, now }),
-      keyPrefix: visitor?.key_prefix ?? undefined,
+      keyPrefix: job.keyPrefix ?? visitor?.last_key_prefix ?? visitor?.key_prefix ?? undefined,
     };
   });
 }
@@ -67,7 +67,7 @@ export function listCallers(db: CarbonDb, engine: JobEngine, now = Date.now()): 
       clientKind: v.last_client ?? undefined,
       clientKindLabel: clientKindLabel(v.last_client ?? undefined),
       clientIp: v.ip ?? undefined,
-      keyPrefix: v.key_prefix ?? undefined,
+      keyPrefix: v.last_key_prefix ?? v.key_prefix ?? undefined,
       lastSeenAt: v.last_seen_at,
       presence: presenceOf({ live: liveJobs > 0, lastSeenAt: v.last_seen_at, now }),
       liveJobs,
@@ -102,7 +102,7 @@ export function listCallers(db: CarbonDb, engine: JobEngine, now = Date.now()): 
         clientKind: j.clientKind ?? v.last_client ?? undefined,
         clientKindLabel: clientKindLabel(j.clientKind ?? v.last_client ?? undefined),
         clientIp: j.clientIp ?? v.ip ?? undefined,
-        keyPrefix: v.key_prefix ?? undefined,
+        keyPrefix: v.last_key_prefix ?? v.key_prefix ?? undefined,
         lastSeenAt: v.last_seen_at,
         presence: "live",
         liveJobs: liveByVisitor.get(v.id) ?? 1,

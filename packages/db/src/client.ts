@@ -48,8 +48,8 @@ export class CarbonDb {
           response_json, events_json, claimed_by, claimed_at, error_json,
           input_tokens, output_tokens, created_at, started_at, finished_at,
           thread_id, turn_count, last_user_preview, deleted_at,
-          visitor_id, client_kind, client_ip, caller_label
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          visitor_id, client_kind, client_ip, caller_label, key_prefix
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         row.id,
@@ -83,6 +83,7 @@ export class CarbonDb {
         row.client_kind ?? null,
         row.client_ip ?? null,
         row.caller_label ?? null,
+        row.key_prefix ?? null,
       );
   }
 
@@ -203,6 +204,8 @@ export function openDatabase(dataDir: string): CarbonDb {
   ensureColumn(sqlite, "jobs", "client_kind", "TEXT");
   ensureColumn(sqlite, "jobs", "client_ip", "TEXT");
   ensureColumn(sqlite, "jobs", "caller_label", "TEXT");
+  ensureColumn(sqlite, "jobs", "key_prefix", "TEXT");
+  ensureColumn(sqlite, "visitors", "last_key_prefix", "TEXT");
   ensureColumn(sqlite, "users", "last_seen_at", "INTEGER");
   ensureColumn(sqlite, "channel_accounts", "base_url", "TEXT");
   ensureColumn(sqlite, "channel_accounts", "sync_buf", "TEXT");

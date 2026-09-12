@@ -42,6 +42,7 @@ export type CreateJobInput = {
   clientKind?: string;
   clientIp?: string;
   callerLabel?: string;
+  keyPrefix?: string;
   adapter?: ProtocolAdapter;
 };
 
@@ -108,6 +109,7 @@ type Runtime = {
   callerLabel?: string;
   clientKind?: string;
   clientIp?: string;
+  keyPrefix?: string;
   threadId: string;
   turnCount: number;
   deletedAt?: number;
@@ -239,6 +241,7 @@ export class JobEngine {
         callerLabel: input.callerLabel,
         clientKind: input.clientKind,
         clientIp: input.clientIp,
+        keyPrefix: input.keyPrefix,
         threadId,
         turnCount,
         adapter: input.adapter ?? new TestAdapter(),
@@ -282,6 +285,7 @@ export class JobEngine {
         client_kind: input.clientKind ?? null,
         client_ip: input.clientIp ?? null,
         caller_label: input.callerLabel ?? null,
+        key_prefix: input.keyPrefix ?? null,
       });
       this.jobs.set(id, rt);
       return this.summary(rt);
@@ -609,6 +613,7 @@ export class JobEngine {
       callerLabel: row.caller_label ?? undefined,
       clientKind: row.client_kind ?? undefined,
       clientIp: row.client_ip ?? undefined,
+      keyPrefix: row.key_prefix ?? undefined,
       threadId: row.thread_id,
       turnCount: row.turn_count ?? 1,
     };
@@ -744,6 +749,7 @@ export class JobEngine {
       callerLabel: rt.callerLabel,
       clientKind: rt.clientKind,
       clientIp: rt.clientIp,
+      keyPrefix: rt.keyPrefix,
       threadId: rt.threadId,
       turnCount: rt.turnCount,
     };

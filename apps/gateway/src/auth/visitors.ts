@@ -51,6 +51,7 @@ function createVisitor(db: CarbonDb, sight: RequestSight, now: number, withKey: 
     last_protocol: null,
     last_seen_at: now,
     created_at: now,
+    last_key_prefix: null,
   };
   db.visitors.insert(row);
   return row;
@@ -99,24 +100,29 @@ export function rememberCaller(
       clientLabel: client.label,
       callerLabel: client.label,
       userId: client.userId,
+      keyPrefix: client.keyPrefix,
     };
   }
   // Guest keys are tickets, not identity — a shared promo key is many people.
   // Who it is = connecting IP + user-agent (and thus client kind).
+  // The presented key is still associated on the visitor and the job.
   const fp = visitorFingerprint(sight.ip, sight.userAgent);
   const existing = db.visitors.getByFingerprint(fp);
   const row = existing
     ? touchVisitor(db, existing, sight, opts.protocol)
     : createVisitor(db, sight, now, false);
-  if (opts.protocol) {
-    db.visitors.touch(row.id, { last_seen_at: Date.now(), last_protocol: opts.protocol, last_client: sight.clientKind });
-  }
+  db.visitors.touch(row.id, {
+    last_seen_at: Date.now(),
+    last_protocol: opts.protocol,
+    last_client: sight.clientKind,
+    last_key_prefix: client.keyPrefix,
+  });
   return {
     clientKeyId: row.id,
     clientLabel: client.label,
     callerLabel: row.short_id,
     visitorId: row.id,
-    keyPrefix: row.key_prefix ?? undefined,
+    keyPrefix: client.keyPrefix ?? row.key_prefix ?? undefined,
   };
 }
 

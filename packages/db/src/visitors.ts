@@ -30,8 +30,8 @@ export class VisitorRepo {
       .query(
         `INSERT INTO visitors (
           id, short_id, fingerprint, key_hash, key_prefix, key_plain,
-          ip, user_agent, last_client, last_protocol, last_seen_at, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ip, user_agent, last_client, last_protocol, last_seen_at, created_at, last_key_prefix
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         row.id,
@@ -46,6 +46,7 @@ export class VisitorRepo {
         row.last_protocol,
         row.last_seen_at,
         row.created_at,
+        row.last_key_prefix ?? null,
       );
   }
 
@@ -94,13 +95,14 @@ export class VisitorRepo {
       user_agent?: string;
       last_client?: string;
       last_protocol?: string;
+      last_key_prefix?: string;
     },
   ): void {
     const row = this.getById(id);
     if (!row) return;
     this.sqlite
       .query(
-        `UPDATE visitors SET last_seen_at = ?, ip = ?, user_agent = ?, last_client = ?, last_protocol = ?
+        `UPDATE visitors SET last_seen_at = ?, ip = ?, user_agent = ?, last_client = ?, last_protocol = ?, last_key_prefix = ?
          WHERE id = ?`,
       )
       .run(
@@ -109,6 +111,7 @@ export class VisitorRepo {
         patch.user_agent ?? row.user_agent,
         patch.last_client ?? row.last_client,
         patch.last_protocol ?? row.last_protocol,
+        patch.last_key_prefix ?? row.last_key_prefix,
         id,
       );
   }

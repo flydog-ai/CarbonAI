@@ -470,7 +470,7 @@ function sessionMeta(
   j: Job | null,
 ): string {
   if (!j) return "";
-  const parts = [kindLabel(t, j.clientKind), j.clientIp].filter(Boolean);
+  const parts = [kindLabel(t, j.clientKind), j.clientIp, j.keyPrefix].filter(Boolean);
   if (isLive(j) || j.presence === "live") parts.push(t("desk.waiting"));
   else if (j.lastSeenAt) parts.push(t("desk.lastSeen", { when: fmtWhen(j.lastSeenAt, t) }));
   if (j.turnCount && j.turnCount > 1) parts.push(t("desk.turns", { n: j.turnCount }));
@@ -625,6 +625,7 @@ function Overview({
                         <td>{c.label}</td>
                         <td>{c.clientKindLabel || kindLabel(t, c.clientKind)}</td>
                         <td className="mono">{c.clientIp || "—"}</td>
+                        <td className="mono">{c.keyPrefix || ""}</td>
                       </tr>
                     ))}
                   </tbody>

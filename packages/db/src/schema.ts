@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   visitor_id    TEXT,
   client_kind   TEXT,
   client_ip     TEXT,
-  caller_label  TEXT
+  caller_label  TEXT,
+  key_prefix    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS blobs (
@@ -102,7 +103,8 @@ CREATE TABLE IF NOT EXISTS visitors (
   last_client   TEXT,
   last_protocol TEXT,
   last_seen_at  INTEGER NOT NULL,
-  created_at    INTEGER NOT NULL
+  created_at    INTEGER NOT NULL,
+  last_key_prefix TEXT
 );
 
 CREATE INDEX IF NOT EXISTS visitors_fingerprint ON visitors(fingerprint);
@@ -180,6 +182,7 @@ export type JobRow = {
   client_kind: string | null;
   client_ip: string | null;
   caller_label: string | null;
+  key_prefix: string | null;
 };
 
 export type BlobRow = {
@@ -265,4 +268,5 @@ export type VisitorRow = {
   last_protocol: string | null;
   last_seen_at: number;
   created_at: number;
+  last_key_prefix: string | null;
 };

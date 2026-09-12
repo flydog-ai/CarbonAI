@@ -105,11 +105,19 @@ describe("guest visitors", () => {
       const jobs = await fetch(`${url}/api/operator/jobs`, { headers: auth });
       expect(jobs.status).toBe(200);
       const listed = (await jobs.json()) as {
-        jobs: { callerLabel?: string; clientKind?: string; clientIp?: string; presence?: string; lastUserPreview?: string }[];
+        jobs: {
+          callerLabel?: string;
+          clientKind?: string;
+          clientIp?: string;
+          presence?: string;
+          lastUserPreview?: string;
+          keyPrefix?: string;
+        }[];
       };
       const job = listed.jobs.find((j) => j.lastUserPreview?.includes("hello guest"));
       expect(job?.callerLabel?.startsWith("G-")).toBe(true);
       expect(job?.clientKind).toBe("claude-code");
+      expect(job?.keyPrefix?.startsWith("sk-carbon-")).toBe(true);
       expect(job?.clientIp).toBe("127.0.0.1");
       expect(job?.presence).toBeTruthy();
 

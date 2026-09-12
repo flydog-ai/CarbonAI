@@ -48,6 +48,7 @@ function baseJob(over: Partial<JobRow> = {}): JobRow {
     client_kind: null,
     client_ip: null,
     caller_label: null,
+    key_prefix: null,
     ...over,
   };
 }
@@ -183,6 +184,7 @@ describe("visitors", () => {
       last_protocol: "anthropic_messages",
       last_seen_at: 1,
       created_at: 1,
+      last_key_prefix: null,
     });
     expect(db.visitors.getById(id)?.short_id).toBe(short);
     expect(db.visitors.getByKeyHash("hash-1")?.id).toBe(id);

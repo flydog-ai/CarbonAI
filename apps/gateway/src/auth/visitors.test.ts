@@ -43,12 +43,14 @@ describe("rememberCaller", () => {
     const home = issueHomepageVisitor(db, sight());
     const fromCli = rememberCaller(
       db,
-      { label: home.short_id, keyId: home.id, visitorId: home.id },
+      { label: home.short_id, keyId: home.id, visitorId: home.id, keyPrefix: "sk-carbon-ab...xyz" },
       sight({ userAgent: "claude-cli/1.0", clientKind: "claude-code" }),
       { protocol: "anthropic_messages" },
     );
     expect(fromCli.visitorId).not.toBe(home.id);
     expect(fromCli.callerLabel.startsWith("G-")).toBe(true);
+    expect(fromCli.keyPrefix).toBe("sk-carbon-ab...xyz");
+    expect(db.visitors.getById(fromCli.visitorId!)?.last_key_prefix).toBe("sk-carbon-ab...xyz");
     expect(db.visitors.getById(fromCli.visitorId!)?.last_client).toBe("claude-code");
 
     const sameCli = rememberCaller(
