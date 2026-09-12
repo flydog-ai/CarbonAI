@@ -13,6 +13,16 @@ import {
   maskPeer,
 } from "./wechat-mp.ts";
 import {
+  dingtalkSignOk,
+  dingtalkText,
+  dingtalkWebhookSend,
+  feishuChallenge,
+  feishuSend,
+  feishuText,
+  feishuTokenOk,
+} from "./feishu.ts";
+import { telegramLoop, telegramSend } from "./telegram.ts";
+import {
   fetchBotQr,
   getUpdates,
   ILINK_QR_BASE,
@@ -25,6 +35,9 @@ import {
 
 const KIND = "wechat_mp";
 const KIND_BOT = "wechat_bot";
+const KIND_TG = "telegram";
+const KIND_FS = "feishu";
+const KIND_DD = "dingtalk";
 const LIVE = new Set(["pending", "claimed", "streaming"]);
 const BIND_TTL_MS = 10 * 60 * 1000;
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -53,6 +66,17 @@ export type ChannelEventView = {
   level: string;
   event: string;
   detail?: string;
+};
+
+export type GenericChannelPublic = {
+  kind: string;
+  enabled: boolean;
+  appId?: string;
+  tokenSet: boolean;
+  secretSet: boolean;
+  tokenPrefix?: string;
+  webhook?: string;
+  bound: number;
 };
 
 export type WechatBotPublic = {
@@ -109,6 +133,7 @@ export class ChannelHub {
   private readonly qrSessions = new Map<string, QrSession>();
   private accessToken?: { value: string; expiresAt: number };
   private botAbort?: AbortController;
+  private tgAbort?: AbortController;
   private lastPushError?: string;
 
   constructor(
@@ -122,11 +147,14 @@ export class ChannelHub {
 
   start(): void {
     this.restartBotMonitor();
+    this.restartTelegram();
   }
 
   stop(): void {
     this.botAbort?.abort();
     this.botAbort = undefined;
+    this.tgAbort?.abort();
+    this.tgAbort = undefined;
   }
 
   callbackInfo(requestUrl: string): { callbackUrl: string; httpsRequired: boolean } {
@@ -223,8 +251,13 @@ export class ChannelHub {
   }
 
   mintBindCode(userId: string): { code: string; expiresAt: number } {
-    const account = this.enabledAccount() ?? this.enabledBot();
-    if (!account) throw new Error("wechat channel is not enabled");
+    const account =
+      this.enabledAccount() ??
+      this.enabledBot() ??
+      this.enabledKind(KIND_TG) ??
+      this.enabledKind(KIND_FS) ??
+      this.enabledKind(KIND_DD);
+    if (!account) throw new Error("no channel is enabled");
     const code = newCode();
     const expiresAt = this.now() + BIND_TTL_MS;
     this.codes.set(code, { userId, accountId: account.id, expiresAt });
@@ -354,7 +387,105 @@ export class ChannelHub {
       base_url: null,
       sync_buf: null,
     });
-    this.stop();
+    this.botAbort?.abort();
+    this.botAbort = undefined;
+  }
+
+  publicGeneric(kind: string): GenericChannelPublic | null {
+    const row = this.db.channels.getByKind(kind);
+    if (!row) return null;
+    return {
+      kind,
+      enabled: row.enabled === 1,
+      appId: row.app_id || undefined,
+      tokenSet: Boolean(row.token),
+      secretSet: Boolean(row.app_secret),
+      tokenPrefix: maskSecret(row.token),
+      webhook: row.base_url || undefined,
+      bound: this.db.channels.listBindings(row.id).length,
+    };
+  }
+
+  upsertGeneric(
+    kind: string,
+    input: {
+      label?: string;
+      appId?: string;
+      appSecret?: string;
+      token?: string;
+      enabled?: boolean;
+      webhook?: string;
+    },
+  ): GenericChannelPublic {
+    const current = this.db.channels.getByKind(kind);
+    const token = input.token !== undefined ? input.token.trim() : (current?.token ?? "");
+    const secret =
+      input.appSecret !== undefined ? input.appSecret.trim() || null : (current?.app_secret ?? null);
+    const appId = input.appId !== undefined ? input.appId.trim() : (current?.app_id ?? "");
+    const webhook =
+      input.webhook !== undefined ? input.webhook.trim() || null : (current?.base_url ?? null);
+    const enabled = input.enabled === undefined ? (current?.enabled ?? 0) : input.enabled ? 1 : 0;
+    if (enabled && kind === KIND_TG && !token) throw new Error("bot token required");
+    if (enabled && kind === KIND_FS && !(appId && secret)) throw new Error("app id and secret required");
+    const labels: Record<string, string> = { telegram: "Telegram", feishu: "Feishu", dingtalk: "DingTalk" };
+    this.db.channels.upsertByKind({
+      id: current?.id ?? newChannelId(),
+      kind,
+      label: input.label ?? current?.label ?? labels[kind] ?? kind,
+      app_id: appId,
+      app_secret: secret,
+      token,
+      aes_key: current?.aes_key ?? null,
+      enabled,
+      created_at: current?.created_at ?? this.now(),
+      base_url: webhook,
+      sync_buf: current?.sync_buf ?? null,
+    });
+    if (kind === KIND_TG) this.restartTelegram();
+    if (input.enabled !== undefined) this.note(kind, "info", enabled ? "enabled" : "disabled");
+    return this.publicGeneric(kind)!;
+  }
+
+  async handleFeishu(body: unknown): Promise<unknown> {
+    const challenge = feishuChallenge(body);
+    if (challenge) return { challenge };
+    const account = this.db.channels.getByKind(KIND_FS);
+    if (!account || account.enabled !== 1) return {};
+    const presented = (body as { token?: string; header?: { token?: string } }).token
+      ?? (body as { header?: { token?: string } }).header?.token;
+    if (account.token && !feishuTokenOk(account.token, presented)) return {};
+    const msg = feishuText(body);
+    if (!msg) return {};
+    const reply = await this.handlePeerText(account.id, msg.peerId, msg.text);
+    if (reply && account.app_id && account.app_secret) {
+      try {
+        await feishuSend(this.wxFetch, {
+          appId: account.app_id,
+          appSecret: account.app_secret,
+          openId: msg.peerId,
+          text: reply,
+        });
+      } catch (err) {
+        this.note(KIND_FS, "error", "send", err instanceof Error ? err.message : String(err));
+      }
+    }
+    return {};
+  }
+
+  async handleDingTalk(
+    headers: { timestamp?: string; sign?: string },
+    body: unknown,
+  ): Promise<unknown> {
+    const account = this.db.channels.getByKind(KIND_DD);
+    if (!account || account.enabled !== 1) return {};
+    if (account.app_secret && !dingtalkSignOk(account.app_secret, headers.timestamp ?? "", headers.sign ?? "")) {
+      return { msgtype: "text", text: { content: "sign mismatch" } };
+    }
+    const msg = dingtalkText(body);
+    if (!msg) return {};
+    const reply = await this.handlePeerText(account.id, msg.peerId, msg.text);
+    if (reply) return { msgtype: "text", text: { content: reply } };
+    return {};
   }
 
   verifyGet(query: { signature?: string; timestamp?: string; nonce?: string; echostr?: string }): string | undefined {
@@ -451,6 +582,54 @@ export class ChannelHub {
         }
       }
     }
+    await this.notifyGeneric(KIND_TG, job.id, async (peer) => {
+      const row = this.db.channels.getByKind(KIND_TG);
+      if (!row?.token) return;
+      await telegramSend(this.wxFetch, row.token, peer, text);
+    });
+    await this.notifyGeneric(KIND_FS, job.id, async (peer) => {
+      const row = this.db.channels.getByKind(KIND_FS);
+      if (!row?.app_id || !row.app_secret) return;
+      await feishuSend(this.wxFetch, { appId: row.app_id, appSecret: row.app_secret, openId: peer, text });
+    });
+    await this.notifyGeneric(KIND_DD, job.id, async () => {
+      const row = this.db.channels.getByKind(KIND_DD);
+      if (!row?.base_url) return;
+      await dingtalkWebhookSend(this.wxFetch, row.base_url, text);
+    });
+  }
+
+  private async notifyGeneric(
+    kind: string,
+    jobId: string,
+    send: (peer: string) => Promise<void>,
+  ): Promise<void> {
+    let row;
+    try {
+      row = this.db.channels.getByKind(kind);
+    } catch {
+      return;
+    }
+    if (!row || row.enabled !== 1) return;
+    const bindings = this.db.channels.listBindings(row.id);
+    if (kind === KIND_DD && row.base_url && bindings.length === 0) {
+      try {
+        await send("");
+        this.note(kind, "info", "push", "webhook");
+      } catch (err) {
+        this.note(kind, "error", "push", err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
+    for (const b of bindings) {
+      this.lastJob.set(b.peer_id, jobId);
+      try {
+        await send(b.peer_id);
+        this.note(kind, "info", "push", b.peer_id.slice(0, 12));
+      } catch (err) {
+        this.note(kind, "error", "push", err instanceof Error ? err.message : String(err));
+      }
+    }
   }
 
   private notifyText(job: JobSummary): string {
@@ -466,6 +645,16 @@ export class ChannelHub {
     try {
       const row = this.db.channels.getByKind(KIND);
       if (!row || row.enabled !== 1 || !row.token) return null;
+      return row;
+    } catch {
+      return null;
+    }
+  }
+
+  private enabledKind(kind: string) {
+    try {
+      const row = this.db.channels.getByKind(kind);
+      if (!row || row.enabled !== 1) return null;
       return row;
     } catch {
       return null;
@@ -491,11 +680,27 @@ export class ChannelHub {
   }
 
   private restartBotMonitor(): void {
-    this.stop();
+    this.botAbort?.abort();
+    this.botAbort = undefined;
     const bot = this.enabledBot();
     if (!bot) return;
     this.botAbort = new AbortController();
     void this.botLoop(bot.id, this.botAbort.signal);
+  }
+
+  private restartTelegram(): void {
+    this.tgAbort?.abort();
+    this.tgAbort = undefined;
+    const row = this.db.channels.getByKind(KIND_TG);
+    if (!row || row.enabled !== 1 || !row.token) return;
+    this.tgAbort = new AbortController();
+    const token = row.token;
+    const accountId = row.id;
+    void telegramLoop(this.wxFetch, {
+      token,
+      abort: this.tgAbort.signal,
+      onText: async (peer, text) => this.handlePeerText(accountId, peer, text),
+    });
   }
 
   private async botLoop(accountId: string, abort: AbortSignal): Promise<void> {

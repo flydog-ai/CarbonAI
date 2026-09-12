@@ -1372,6 +1372,9 @@ function Settings({
   const [kind, setKind] = useState<ConnectKind>("wechat_mp");
   const [mpOn, setMpOn] = useState(false);
   const [botOn, setBotOn] = useState(false);
+  const [tgOn, setTgOn] = useState(false);
+  const [fsOn, setFsOn] = useState(false);
+  const [ddOn, setDdOn] = useState(false);
   const [form, setForm] = useState<SiteSettings>({
     name: "Carbon AI",
     nameZh: "碳基智能",
@@ -1401,19 +1404,25 @@ function Settings({
     const { res, body } = await api<{
       wechat?: { enabled?: boolean };
       wechatBot?: { connected?: boolean };
+      telegram?: { enabled?: boolean };
+      feishu?: { enabled?: boolean };
+      dingtalk?: { enabled?: boolean };
     }>("/api/admin/channels");
     if (!res.ok) return;
     setMpOn(Boolean(body.wechat?.enabled));
     setBotOn(Boolean(body.wechatBot?.connected));
+    setTgOn(Boolean(body.telegram?.enabled));
+    setFsOn(Boolean(body.feishu?.enabled));
+    setDdOn(Boolean(body.dingtalk?.enabled));
   }
   useEffect(() => { void load(); void loadConnect(); }, []);
 
   const types: { id: ConnectKind; soon?: boolean; on?: boolean }[] = [
     { id: "wechat_mp", on: mpOn },
     { id: "wechat_bot", on: botOn },
-    { id: "feishu", soon: true },
-    { id: "dingtalk", soon: true },
-    { id: "telegram", soon: true },
+    { id: "feishu", on: fsOn },
+    { id: "dingtalk", on: ddOn },
+    { id: "telegram", on: tgOn },
   ];
 
   return (
@@ -1501,7 +1510,7 @@ function Settings({
                   <b>{t(`connect.${item.id}`)}</b>
                   <span>{t(`connect.${item.id}Hint`)}</span>
                   <em className={`connect-st${item.on ? " on" : ""}`}>
-                    {item.soon ? t("connect.statusSoon") : item.on ? t("connect.statusOn") : t("connect.statusOff")}
+                    {item.on ? t("connect.statusOn") : t("connect.statusOff")}
                   </em>
                 </button>
               ))}
@@ -1514,13 +1523,14 @@ function Settings({
                 </>
               ) : null}
               {kind === "wechat_bot" ? <WechatBotAdmin t={t} flash={flash} onStatus={setBotOn} /> : null}
-              {kind === "feishu" || kind === "dingtalk" || kind === "telegram" ? (
-                <>
-                  <h3>{t(`connect.${kind}`)}</h3>
-                  <p className="sub">{t(`connect.${kind}Hint`)}</p>
-                  <p className="sub" style={{ marginTop: 12 }}>{t("connect.soonTitle")}</p>
-                  <p className="sub">{t("connect.soonBody")}</p>
-                </>
+              {kind === "telegram" ? (
+                <GenericConnect kind="telegram" t={t} flash={flash} copy={copy} canDesk={canDesk} onStatus={setTgOn} />
+              ) : null}
+              {kind === "feishu" ? (
+                <GenericConnect kind="feishu" t={t} flash={flash} copy={copy} canDesk={canDesk} onStatus={setFsOn} />
+              ) : null}
+              {kind === "dingtalk" ? (
+                <GenericConnect kind="dingtalk" t={t} flash={flash} copy={copy} canDesk={canDesk} onStatus={setDdOn} />
               ) : null}
             </div>
           </div>
@@ -2016,4 +2026,175 @@ function WechatBind({
     </>
   );
   return framed ? <div className="card card-pad" style={{ maxWidth: 560, marginTop: 16 }}>{inner}</div> : inner;
+}
+
+function GenericConnect({
+  kind,
+  t,
+  flash,
+  copy,
+  canDesk,
+  onStatus,
+}: {
+  kind: "telegram" | "feishu" | "dingtalk";
+  t: (k: string, v?: Record<string, string | number>) => string;
+  flash: (msg: string) => void;
+  copy: (text: string, ok: string) => void;
+  canDesk: boolean;
+  onStatus?: (on: boolean) => void;
+}) {
+  const [enabled, setEnabled] = useState(false);
+  const [appId, setAppId] = useState("");
+  const [appSecret, setAppSecret] = useState("");
+  const [token, setToken] = useState("");
+  const [webhook, setWebhook] = useState("");
+  const [hook, setHook] = useState("");
+  const [tokenPrefix, setTokenPrefix] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [events, setEvents] = useState<ChannelEvent[]>([]);
+
+  async function load() {
+    const { res, body } = await api<{
+      telegram?: { enabled?: boolean; tokenPrefix?: string };
+      feishu?: { enabled?: boolean; appId?: string; tokenSet?: boolean };
+      dingtalk?: { enabled?: boolean; webhook?: string; secretSet?: boolean };
+      feishuCallback?: string;
+      dingtalkCallback?: string;
+    }>("/api/admin/channels");
+    if (!res.ok) return;
+    const row = body[kind];
+    setEnabled(Boolean(row?.enabled));
+    onStatus?.(Boolean(row?.enabled));
+    if (kind === "telegram") setTokenPrefix(body.telegram?.tokenPrefix || "");
+    if (kind === "feishu") {
+      setAppId(body.feishu?.appId || "");
+      setHook(body.feishuCallback || "");
+    }
+    if (kind === "dingtalk") {
+      setWebhook(body.dingtalk?.webhook || "");
+      setHook(body.dingtalkCallback || "");
+    }
+    const ev = await api<{ events?: ChannelEvent[] }>(`/api/admin/channels/events?kind=${kind}`);
+    if (ev.res.ok) setEvents(ev.body.events || []);
+  }
+  useEffect(() => { void load(); }, [kind]);
+
+  async function save(extra: Record<string, unknown> = {}) {
+    setBusy(true);
+    setErr("");
+    const { res, body } = await api<{ error?: string } & Record<string, { enabled?: boolean }>>("/api/admin/channels", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind,
+        enabled,
+        appId: kind === "feishu" ? appId : undefined,
+        appSecret: appSecret || undefined,
+        token: token || undefined,
+        webhook: kind === "dingtalk" ? webhook : undefined,
+        ...extra,
+      }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      setErr(body.error || t("settings.saveFailed"));
+      return;
+    }
+    setAppSecret("");
+    setToken("");
+    const row = body[kind] as { enabled?: boolean } | undefined;
+    setEnabled(Boolean(row?.enabled));
+    onStatus?.(Boolean(row?.enabled));
+    flash(t("channels.saved"));
+    void load();
+  }
+
+  return (
+    <div>
+      <div className="channel-head">
+        <div>
+          <h3>{t(`connect.${kind}`)}</h3>
+          <p className="sub">{t(`connect.${kind}Hint`)}</p>
+        </div>
+        <label className="channel-enable">
+          <button
+            type="button"
+            className={`switch${enabled ? " on" : ""}`}
+            aria-pressed={enabled}
+            disabled={busy}
+            onClick={() => void save({ enabled: !enabled })}
+          />
+          {t("channels.enable")}
+        </label>
+      </div>
+      {kind === "telegram" ? (
+        <>
+          <label>{t("connect.botToken")}</label>
+          <input className="mono" type="password" value={token} placeholder={tokenPrefix || ""} onChange={(e) => setToken(e.target.value)} />
+        </>
+      ) : null}
+      {kind === "feishu" ? (
+        <>
+          <div className="secret-row">
+            <span className="secret-k">{t("connect.hook")}</span>
+            <code className="secret-v mono">{hook || "—"}</code>
+            <span className="secret-actions">
+              {hook ? (
+                <button className="btn btn-secondary btn-sm" type="button" onClick={() => copy(hook, t("keys.copied"))}>{t("home.copy")}</button>
+              ) : null}
+            </span>
+          </div>
+          <label>{t("channels.appId")}</label>
+          <input className="mono" value={appId} onChange={(e) => setAppId(e.target.value)} />
+          <label>{t("channels.appSecret")}</label>
+          <input className="mono" type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} />
+          <label>{t("connect.verifyToken")}</label>
+          <input className="mono" value={token} onChange={(e) => setToken(e.target.value)} />
+        </>
+      ) : null}
+      {kind === "dingtalk" ? (
+        <>
+          <div className="secret-row">
+            <span className="secret-k">{t("connect.hook")}</span>
+            <code className="secret-v mono">{hook || "—"}</code>
+            <span className="secret-actions">
+              {hook ? (
+                <button className="btn btn-secondary btn-sm" type="button" onClick={() => copy(hook, t("keys.copied"))}>{t("home.copy")}</button>
+              ) : null}
+            </span>
+          </div>
+          <label>{t("channels.appSecret")}</label>
+          <input className="mono" type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} />
+          <label>{t("connect.webhook")}</label>
+          <input className="mono" value={webhook} onChange={(e) => setWebhook(e.target.value)} />
+        </>
+      ) : null}
+      <p className="err">{err}</p>
+      <p style={{ margin: "12px 0 0" }}>
+        <button className="btn" type="button" disabled={busy} onClick={() => void save()}>
+          {busy ? t("settings.saving") : t("settings.save")}
+        </button>
+      </p>
+      {canDesk ? (
+        <div className="channel-sec">
+          <WechatBind t={t} copy={copy} framed={false} />
+        </div>
+      ) : null}
+      <div className="channel-sec">
+        <h4>{t("channels.sectionLog")}</h4>
+        {events.length === 0 ? <p className="sub">{t("channels.noLog")}</p> : (
+          <ul className="channel-log">
+            {events.map((e, i) => (
+              <li key={`${e.at}-${i}`}>
+                <time>{fmtWhen(e.at, t)}</time>
+                <span className={`lv-${e.level}`}>{e.event}</span>
+                <span className="log-d">{e.detail || ""}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
 }

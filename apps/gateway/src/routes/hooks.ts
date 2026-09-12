@@ -30,5 +30,20 @@ export function hookRoutes(hub: ChannelHub): Hono {
     return new Response(xml, { headers: { "content-type": "application/xml; charset=utf-8" } });
   });
 
+  app.post("/hooks/feishu", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const out = await hub.handleFeishu(body);
+    return c.json(out);
+  });
+
+  app.post("/hooks/dingtalk", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const out = await hub.handleDingTalk(
+      { timestamp: c.req.header("timestamp") ?? undefined, sign: c.req.header("sign") ?? undefined },
+      body,
+    );
+    return c.json(out);
+  });
+
   return app;
 }

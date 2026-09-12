@@ -75,10 +75,16 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, c
   app.get("/api/admin/channels", (c) => {
     if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
     if (!channels) return c.json({ error: "unavailable" }, 503);
+    const origin = channels.callbackInfo(c.req.url);
     return c.json({
-      ...channels.callbackInfo(c.req.url),
+      ...origin,
+      feishuCallback: origin.callbackUrl.replace(/\/hooks\/wechat$/, "/hooks/feishu"),
+      dingtalkCallback: origin.callbackUrl.replace(/\/hooks\/wechat$/, "/hooks/dingtalk"),
       wechat: channels.publicWechat(),
       wechatBot: channels.publicWechatBot(),
+      telegram: channels.publicGeneric("telegram"),
+      feishu: channels.publicGeneric("feishu"),
+      dingtalk: channels.publicGeneric("dingtalk"),
     });
   });
 
@@ -100,25 +106,44 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, c
       token?: string;
       aesKey?: string | null;
       enabled?: boolean;
+      webhook?: string;
     };
-    if (body.kind && body.kind !== "wechat_mp") return c.json({ error: "unsupported channel" }, 400);
-    let wechat;
+    const kind = body.kind || "wechat_mp";
     try {
-      wechat = channels.upsertWechat({
-        label: body.label,
-        appId: body.appId,
-        appSecret: body.appSecret,
-        token: body.token,
-        aesKey: body.aesKey,
-        enabled: body.enabled,
-      });
+      if (kind === "wechat_mp") {
+        channels.upsertWechat({
+          label: body.label,
+          appId: body.appId,
+          appSecret: body.appSecret,
+          token: body.token,
+          aesKey: body.aesKey,
+          enabled: body.enabled,
+        });
+      } else if (kind === "telegram" || kind === "feishu" || kind === "dingtalk") {
+        channels.upsertGeneric(kind, {
+          label: body.label,
+          appId: body.appId,
+          appSecret: body.appSecret,
+          token: body.token,
+          enabled: body.enabled,
+          webhook: body.webhook,
+        });
+      } else {
+        return c.json({ error: "unsupported channel" }, 400);
+      }
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : "save failed" }, 400);
     }
+    const origin = channels.callbackInfo(c.req.url);
     return c.json({
-      ...channels.callbackInfo(c.req.url),
-      wechat,
+      ...origin,
+      feishuCallback: origin.callbackUrl.replace(/\/hooks\/wechat$/, "/hooks/feishu"),
+      dingtalkCallback: origin.callbackUrl.replace(/\/hooks\/wechat$/, "/hooks/dingtalk"),
+      wechat: channels.publicWechat(),
       wechatBot: channels.publicWechatBot(),
+      telegram: channels.publicGeneric("telegram"),
+      feishu: channels.publicGeneric("feishu"),
+      dingtalk: channels.publicGeneric("dingtalk"),
     });
   });
 
