@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS channel_accounts (
   sync_buf    TEXT
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS channel_accounts_user_kind ON channel_accounts(user_id, kind);
+-- Unique (user_id, kind) is created in migrateChannelAccounts after user_id exists on old DBs.
 
 CREATE TABLE IF NOT EXISTS channel_bindings (
   id          TEXT PRIMARY KEY,

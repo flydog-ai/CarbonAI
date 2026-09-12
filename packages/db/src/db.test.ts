@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -308,5 +309,34 @@ describe("channels", () => {
     });
     expect(db.channels.getBindingByPeer(account.id, "openid-a")?.user_id).toBe(user.id);
     db.close();
+  });
+
+  test("openDatabase migrates channel_accounts that lack user_id", async () => {
+    const dir = tmp();
+    const raw = new Database(join(dir, "carbon.db"));
+    raw.exec(`
+      CREATE TABLE channel_accounts (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        label TEXT NOT NULL,
+        app_id TEXT NOT NULL DEFAULT '',
+        app_secret TEXT,
+        token TEXT NOT NULL DEFAULT '',
+        aes_key TEXT,
+        enabled INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX channel_accounts_kind ON channel_accounts(kind);
+      INSERT INTO channel_accounts (id, kind, label, app_id, token, enabled, created_at)
+      VALUES ('ch_old', 'wechat_mp', 'WeChat MP', 'wx', 'tok', 1, 1);
+    `);
+    raw.close();
+    const db = openDatabase(dir);
+    const admin = await newUser({ username: "admin", password: "password1", role: "superadmin", canReply: true });
+    db.users.insert(admin);
+    db.close();
+    const again = openDatabase(dir);
+    expect(again.channels.getByUserKind(admin.id, "wechat_mp")?.id).toBe("ch_old");
+    again.close();
   });
 });
