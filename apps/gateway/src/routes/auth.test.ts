@@ -101,7 +101,7 @@ describe("user accounts phase 1", () => {
       expect(reg.status).toBe(201);
       const created = (await reg.json()) as { user: { username: string; canReply: boolean }; apiKey: string };
       expect(created.user.username).toBe("alice");
-      expect(created.user.canReply).toBe(false);
+      expect(created.user.canReply).toBe(true);
       expect(created.apiKey.startsWith("sk-carbon-")).toBe(true);
 
       const models = await fetch(`${url}/v1/models`, {
@@ -126,6 +126,12 @@ describe("user accounts phase 1", () => {
       expect(msg.status).toBe(200);
       await msg.body?.cancel();
 
+      const aliceCookie = cookieFrom(reg);
+      const jobs = await fetch(`${url}/api/operator/jobs`, { headers: { cookie: aliceCookie } });
+      expect(jobs.status).toBe(200);
+      const listed = (await jobs.json()) as { jobs: { clientLabel: string; callerLabel?: string }[] };
+      expect(listed.jobs.some((j) => j.clientLabel === "alice" || j.callerLabel === "alice")).toBe(true);
+
       const adminLogin = await fetch(`${url}/api/auth/login`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -133,10 +139,9 @@ describe("user accounts phase 1", () => {
       });
       expect(adminLogin.status).toBe(200);
       const adminCookie = cookieFrom(adminLogin);
-      const jobs = await fetch(`${url}/api/operator/jobs`, { headers: { cookie: adminCookie } });
-      expect(jobs.status).toBe(200);
-      const listed = (await jobs.json()) as { jobs: { clientLabel: string; userId?: string }[] };
-      expect(listed.jobs.some((j) => j.clientLabel === "alice")).toBe(true);
+      const adminJobs = await fetch(`${url}/api/operator/jobs`, { headers: { cookie: adminCookie } });
+      const adminListed = (await adminJobs.json()) as { jobs: { clientLabel: string }[] };
+      expect(adminListed.jobs.some((j) => j.clientLabel === "alice")).toBe(false);
 
       const minted = await fetch(`${url}/api/me/keys`, {
         method: "POST",
@@ -169,8 +174,8 @@ describe("user accounts phase 1", () => {
       });
       const bob = (await reg.json()) as { user: { id: string }; apiKey: string };
       const bobCookie = cookieFrom(reg);
-      const denied = await fetch(`${url}/api/operator/jobs`, { headers: { cookie: bobCookie } });
-      expect(denied.status).toBe(403);
+      const allowed = await fetch(`${url}/api/operator/jobs`, { headers: { cookie: bobCookie } });
+      expect(allowed.status).toBe(200);
 
       const adminLogin = await fetch(`${url}/api/auth/login`, {
         method: "POST",
@@ -178,15 +183,6 @@ describe("user accounts phase 1", () => {
         body: JSON.stringify({ username: "admin", password: "adminpass" }),
       });
       const adminCookie = cookieFrom(adminLogin);
-      const grant = await fetch(`${url}/api/admin/users/${bob.user.id}`, {
-        method: "PATCH",
-        headers: { cookie: adminCookie, "content-type": "application/json" },
-        body: JSON.stringify({ canReply: true }),
-      });
-      expect(grant.status).toBe(200);
-
-      const allowed = await fetch(`${url}/api/operator/jobs`, { headers: { cookie: bobCookie } });
-      expect(allowed.status).toBe(200);
 
       const disable = await fetch(`${url}/api/admin/users/${bob.user.id}`, {
         method: "PATCH",

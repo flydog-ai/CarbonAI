@@ -82,7 +82,7 @@ export function authRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, ch
     if (!USER_RE.test(username)) return c.json({ error: "username must be 3-32 letters, digits, _ or -" }, 400);
     if (password.length < 8) return c.json({ error: "password must be at least 8 characters" }, 400);
     if (db.users.getByUsername(username)) return c.json({ error: "username taken" }, 409);
-    const user = await newUser({ username, password });
+    const user = await newUser({ username, password, canReply: true });
     db.users.insert(user);
     const plaintext = mintApiKeyPlaintext();
     db.users.insertKey({

@@ -115,8 +115,11 @@ function maskSecret(value: string | null | undefined): string | undefined {
   return `${value.slice(0, 2)}••••${value.slice(-4)}`;
 }
 
-function liveJobs(engine: JobEngine): JobSummary[] {
-  return engine.list().filter((j) => LIVE.has(j.status)).sort((a, b) => a.createdAt - b.createdAt);
+function liveJobs(engine: JobEngine, ownerId?: string): JobSummary[] {
+  return engine
+    .list()
+    .filter((j) => LIVE.has(j.status) && (!ownerId || j.ownerId === ownerId))
+    .sort((a, b) => a.createdAt - b.createdAt);
 }
 
 function jobLine(j: JobSummary, i: number): string {
@@ -552,6 +555,7 @@ export class ChannelHub {
     }
     if (mp?.app_id && mp.app_secret) {
       for (const b of this.db.channels.listBindings(mp.id)) {
+        if (job.ownerId && b.user_id !== job.ownerId) continue;
         this.lastJob.set(b.peer_id, job.id);
         try {
           await this.sendCustom(mp.app_id, mp.app_secret, b.peer_id, text);
@@ -568,6 +572,7 @@ export class ChannelHub {
     const bot = this.enabledBot();
     if (bot?.token && bot.base_url) {
       for (const b of this.db.channels.listBindings(bot.id)) {
+        if (job.ownerId && b.user_id !== job.ownerId) continue;
         this.lastJob.set(b.peer_id, job.id);
         try {
           await sendBotText(this.ilinkFetch, {
@@ -611,8 +616,9 @@ export class ChannelHub {
       return;
     }
     if (!row || row.enabled !== 1) return;
-    const bindings = this.db.channels.listBindings(row.id);
-    if (kind === KIND_DD && row.base_url && bindings.length === 0) {
+    const ownerId = this.engine.list().find((j) => j.id === jobId)?.ownerId;
+    const bindings = this.db.channels.listBindings(row.id).filter((b) => !ownerId || b.user_id === ownerId);
+    if (kind === KIND_DD && row.base_url && bindings.length === 0 && !ownerId) {
       try {
         await send("");
         this.note(kind, "info", "push", "webhook");
@@ -792,14 +798,14 @@ export class ChannelHub {
     }
 
     const lower = text.toLowerCase();
-    if (lower === "列表" || lower === "list") return this.listText();
+    if (lower === "列表" || lower === "list") return this.listText(user.id);
     if (lower === "取消" || lower === "cancel") return this.cancelLast(fromUser, user.id);
     if (lower === "工具" || lower === "/tool") {
       return "工具调用请在控制台 Sessions 里操作。这里只接受文字回复。";
     }
 
     const numbered = /^(\d+)[\s.、:：]+([\s\S]+)$/.exec(text);
-    const jobs = liveJobs(this.engine);
+    const jobs = liveJobs(this.engine, user.id);
     let job: JobSummary | undefined;
     let body = text;
     if (numbered) {
@@ -851,14 +857,14 @@ export class ChannelHub {
 订阅号通常不能主动推送。有新会话时请在这里发「列表」，然后直接打字回复。`;
   }
 
-  private listText(): string {
-    const jobs = liveJobs(this.engine);
+  private listText(ownerId: string): string {
+    const jobs = liveJobs(this.engine, ownerId);
     if (jobs.length === 0) return "没有等待回复的会话。";
     return `进行中 ${jobs.length} 条：\n${jobs.map((j, i) => jobLine(j, i)).join("\n\n")}\n\n回复「1 你的回答」指定会话。`;
   }
 
   private async cancelLast(openid: string, userId: string): Promise<string> {
-    const jobs = liveJobs(this.engine);
+    const jobs = liveJobs(this.engine, userId);
     const lastId = this.lastJob.get(openid);
     const job = jobs.find((j) => j.id === lastId) ?? (jobs.length === 1 ? jobs[0] : undefined);
     if (!job) return "没有可取消的会话。发「列表」查看。";

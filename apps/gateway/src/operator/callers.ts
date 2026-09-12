@@ -45,8 +45,8 @@ export function decorateJobs(db: CarbonDb, jobs: JobSummary[], now = Date.now())
   });
 }
 
-export function listCallers(db: CarbonDb, engine: JobEngine, now = Date.now()): CallerView[] {
-  const jobs = engine.list();
+export function listCallers(db: CarbonDb, engine: JobEngine, now = Date.now(), ownerId?: string): CallerView[] {
+  const jobs = ownerId ? engine.list().filter((j) => j.ownerId === ownerId) : engine.list();
   const live = jobs.filter((j) => isLive(j.status));
   const liveByVisitor = new Map<string, number>();
   const liveByUser = new Map<string, number>();
@@ -57,8 +57,10 @@ export function listCallers(db: CarbonDb, engine: JobEngine, now = Date.now()): 
 
   const since = now - CALLER_RECENT_MS;
   const byId = new Map<string, CallerView>();
+  const ownedVisitors = new Set(jobs.map((j) => j.visitorId).filter((id): id is string => Boolean(id)));
 
   for (const v of db.visitors.listRecent(since, 80)) {
+    if (ownerId && !ownedVisitors.has(v.id) && !liveByVisitor.has(v.id)) continue;
     const liveJobs = liveByVisitor.get(v.id) ?? 0;
     byId.set(v.id, {
       id: v.id,
@@ -76,6 +78,7 @@ export function listCallers(db: CarbonDb, engine: JobEngine, now = Date.now()): 
 
   for (const u of db.users.listSeenSince(since, 80)) {
     if (!u.last_seen_at) continue;
+    if (ownerId && u.id !== ownerId) continue;
     const liveJobs = liveByUser.get(u.id) ?? 0;
     const latest = jobs.find((j) => j.userId === u.id);
     byId.set(u.id, {

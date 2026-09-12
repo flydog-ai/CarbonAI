@@ -60,14 +60,14 @@ export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, use
     const s = requireReply(c);
     if (s === "forbidden") return c.json({ error: "no reply permission" }, 403);
     if (!s) return c.json({ error: "unauthorized" }, 401);
-    return c.json({ jobs: decorateJobs(db, engine.list()) });
+    return c.json({ jobs: decorateJobs(db, engine.list().filter((j) => j.ownerId === s.id)) });
   });
 
   app.get("/api/operator/callers", (c) => {
     const s = requireReply(c);
     if (s === "forbidden") return c.json({ error: "no reply permission" }, 403);
     if (!s) return c.json({ error: "unauthorized" }, 401);
-    return c.json({ callers: listCallers(db, engine) });
+    return c.json({ callers: listCallers(db, engine, Date.now(), s.id) });
   });
 
   app.get("/api/operator/jobs/:id", (c) => {
@@ -75,7 +75,9 @@ export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, use
     if (s === "forbidden") return c.json({ error: "no reply permission" }, 403);
     if (!s) return c.json({ error: "unauthorized" }, 401);
     try {
-      return c.json(decorateJobs(db, [engine.get(c.req.param("id"))])[0]);
+      const job = engine.get(c.req.param("id"));
+      if (job.ownerId !== s.id) return c.json({ error: "not found" }, 404);
+      return c.json(decorateJobs(db, [job])[0]);
     } catch (err) {
       if (err instanceof JobNotFoundError) return c.json({ error: err.message }, 404);
       throw err;
@@ -88,6 +90,7 @@ export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, use
     if (!s) return c.json({ error: "unauthorized" }, 401);
     const id = c.req.param("id");
     try {
+      if (engine.get(id).ownerId !== s.id) return c.json({ error: "not found" }, 404);
       const req = engine.normalized(id);
       const cursor = c.req.query("cursor") ?? "0";
       const limit = Number(c.req.query("limit") ?? "50");
@@ -107,6 +110,7 @@ export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, use
     if (!session) return c.json({ error: "unauthorized" }, 401);
     const id = c.req.param("id");
     try {
+      if (engine.get(id).ownerId !== session.id) return c.json({ error: "not found" }, 404);
       const body = await readJsonCapped(c.req.raw, cfg.server.maxBodyBytes);
       const req = engine.normalized(id);
       const blocks = blocksFromReply(req.tools, body);
@@ -125,6 +129,7 @@ export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, use
     if (s === "forbidden") return c.json({ error: "no reply permission" }, 403);
     if (!s) return c.json({ error: "unauthorized" }, 401);
     try {
+      if (engine.get(c.req.param("id")).ownerId !== s.id) return c.json({ error: "not found" }, 404);
       await engine.cancel(c.req.param("id"), "operator");
       return c.json({ ok: true });
     } catch (err) {

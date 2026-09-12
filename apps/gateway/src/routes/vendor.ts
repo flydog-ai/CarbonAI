@@ -173,6 +173,7 @@ export function vendorRoutes(cfg: Config, engine: JobEngine, db?: CarbonDb): Hon
         clientKind: sight.clientKind,
         clientIp: sight.ip,
         keyPrefix: caller?.keyPrefix ?? client.keyPrefix,
+        ownerId: client.userId ?? db?.users.siteDeskId(),
       });
       console.log(
         `job ${summary.id} ${normalized.stream ? "streaming" : "json"} ${protocol} model=${normalized.model} — complete: POST /debug/jobs/${summary.id}/complete`,

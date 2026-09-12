@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   client_kind   TEXT,
   client_ip     TEXT,
   caller_label  TEXT,
-  key_prefix    TEXT
+  key_prefix    TEXT,
+  owner_id      TEXT
 );
 
 CREATE TABLE IF NOT EXISTS blobs (
@@ -183,6 +184,7 @@ export type JobRow = {
   client_ip: string | null;
   caller_label: string | null;
   key_prefix: string | null;
+  owner_id: string | null;
 };
 
 export type BlobRow = {

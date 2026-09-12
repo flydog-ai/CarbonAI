@@ -43,6 +43,7 @@ export type CreateJobInput = {
   clientIp?: string;
   callerLabel?: string;
   keyPrefix?: string;
+  ownerId?: string;
   adapter?: ProtocolAdapter;
 };
 
@@ -72,6 +73,7 @@ export type JobSummary = {
   lastSeenAt?: number;
   presence?: "live" | "online" | "idle";
   keyPrefix?: string;
+  ownerId?: string;
 };
 
 type TerminalState = { status: "completed" | "cancelled" | "failed"; error?: string; code?: string };
@@ -110,6 +112,7 @@ type Runtime = {
   clientKind?: string;
   clientIp?: string;
   keyPrefix?: string;
+  ownerId?: string;
   threadId: string;
   turnCount: number;
   deletedAt?: number;
@@ -242,6 +245,7 @@ export class JobEngine {
         clientKind: input.clientKind,
         clientIp: input.clientIp,
         keyPrefix: input.keyPrefix,
+        ownerId: input.ownerId ?? this.db.users.siteDeskId(),
         threadId,
         turnCount,
         adapter: input.adapter ?? new TestAdapter(),
@@ -286,6 +290,7 @@ export class JobEngine {
         client_ip: input.clientIp ?? null,
         caller_label: input.callerLabel ?? null,
         key_prefix: input.keyPrefix ?? null,
+        owner_id: input.ownerId ?? null,
       });
       this.jobs.set(id, rt);
       return this.summary(rt);
@@ -614,6 +619,7 @@ export class JobEngine {
       clientKind: row.client_kind ?? undefined,
       clientIp: row.client_ip ?? undefined,
       keyPrefix: row.key_prefix ?? undefined,
+      ownerId: row.owner_id ?? undefined,
       threadId: row.thread_id,
       turnCount: row.turn_count ?? 1,
     };
@@ -750,6 +756,7 @@ export class JobEngine {
       clientKind: rt.clientKind,
       clientIp: rt.clientIp,
       keyPrefix: rt.keyPrefix,
+      ownerId: rt.ownerId,
       threadId: rt.threadId,
       turnCount: rt.turnCount,
     };

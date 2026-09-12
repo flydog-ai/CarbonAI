@@ -43,6 +43,15 @@ export class UserRepo {
     return this.sqlite.query("SELECT * FROM users ORDER BY created_at ASC").all() as UserRow[];
   }
 
+  siteDeskId(): string | undefined {
+    const row = this.sqlite
+      .query(
+        "SELECT id FROM users WHERE role = 'superadmin' AND disabled = 0 ORDER BY created_at ASC LIMIT 1",
+      )
+      .get() as { id: string } | null;
+    return row?.id;
+  }
+
   setPasswordHash(id: string, passwordHash: string): void {
     this.sqlite.query("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, id);
   }

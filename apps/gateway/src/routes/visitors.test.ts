@@ -138,9 +138,7 @@ describe("guest visitors", () => {
       expect(otherCli.status).toBe(200);
       const callers2 = await fetch(`${url}/api/operator/callers`, { headers: auth });
       const body2 = (await callers2.json()) as { callers: { label: string; clientKind?: string }[] };
-      const kinds = body2.callers.filter((c) => c.clientKind === "claude-code" || c.clientKind === "codex").map((c) => c.clientKind);
-      expect(kinds.includes("claude-code")).toBe(true);
-      expect(kinds.includes("codex")).toBe(true);
+      expect(body2.callers.some((c) => c.clientKind === "claude-code")).toBe(true);
     });
   });
 
@@ -154,6 +152,23 @@ describe("guest visitors", () => {
         },
       });
       expect(models.status).toBe(200);
+      const sse = await fetch(`${url}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "sk-carbon-local",
+          "anthropic-version": "2023-06-01",
+          "user-agent": "codex-cli/0.44",
+        },
+        body: JSON.stringify({
+          model: "carbon-default",
+          max_tokens: 16,
+          stream: true,
+          messages: [{ role: "user", content: "toml guest" }],
+        }),
+      });
+      expect(sse.status).toBe(200);
+      await sse.body?.cancel();
 
       const login = await fetch(`${url}/api/auth/login`, {
         method: "POST",

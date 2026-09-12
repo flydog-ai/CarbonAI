@@ -49,6 +49,7 @@ function baseJob(over: Partial<JobRow> = {}): JobRow {
     client_ip: null,
     caller_label: null,
     key_prefix: null,
+    owner_id: null,
     ...over,
   };
 }
