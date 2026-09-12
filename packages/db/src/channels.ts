@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { ChannelAccountRow, ChannelBindingRow } from "./schema.ts";
+import type { ChannelAccountRow, ChannelBindingRow, ChannelEventRow } from "./schema.ts";
 
 function nid(prefix: string): string {
   return prefix + crypto.randomUUID().replaceAll("-", "").slice(0, 22);
@@ -11,6 +11,10 @@ export function newChannelId(): string {
 
 export function newBindingId(): string {
   return nid("bnd_");
+}
+
+export function newChannelEventId(): string {
+  return nid("cev_");
 }
 
 export class ChannelRepo {
@@ -113,5 +117,27 @@ export class ChannelRepo {
 
   deleteBindingByUser(accountId: string, userId: string): void {
     this.sqlite.query("DELETE FROM channel_bindings WHERE account_id = ? AND user_id = ?").run(accountId, userId);
+  }
+
+  addEvent(row: ChannelEventRow): void {
+    this.sqlite
+      .query(
+        `INSERT INTO channel_events (id, account_id, kind, level, event, detail, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(row.id, row.account_id, row.kind, row.level, row.event, row.detail, row.created_at);
+    this.sqlite
+      .query(
+        `DELETE FROM channel_events WHERE kind = ? AND id NOT IN (
+           SELECT id FROM channel_events WHERE kind = ? ORDER BY created_at DESC LIMIT 80
+         )`,
+      )
+      .run(row.kind, row.kind);
+  }
+
+  listEvents(kind: string, limit = 30): ChannelEventRow[] {
+    return this.sqlite
+      .query("SELECT * FROM channel_events WHERE kind = ? ORDER BY created_at DESC LIMIT ?")
+      .all(kind, limit) as ChannelEventRow[];
   }
 }

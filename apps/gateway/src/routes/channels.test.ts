@@ -88,6 +88,8 @@ describe("wechat channel", () => {
       expect(after.wechat.secretSet).toBe(true);
       expect(after.wechat.appId).toBe("wxapp");
       expect(after.wechat.enabled).toBe(true);
+      expect(after.wechat.token).toBe("tok");
+      expect(after.wechat.secretPrefix).toContain("••••");
       expect(JSON.stringify(after)).not.toContain("app_secret");
       expect(JSON.stringify(after)).not.toContain('"appSecret"');
 

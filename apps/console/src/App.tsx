@@ -1540,7 +1540,12 @@ type WechatChannel = {
   bound?: number;
   pushReady?: boolean;
   lastPushError?: string;
+  token?: string;
+  aesKey?: string;
+  secretPrefix?: string;
 };
+
+type ChannelEvent = { at: number; level: string; event: string; detail?: string };
 
 function ChannelAdmin({
   t,
@@ -1561,8 +1566,10 @@ function ChannelAdmin({
   const [token, setToken] = useState("");
   const [aesKey, setAesKey] = useState("");
   const [enabled, setEnabled] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [events, setEvents] = useState<ChannelEvent[]>([]);
 
   async function load() {
     const { res, body } = await api<{
@@ -1580,93 +1587,195 @@ function ChannelAdmin({
     setHttpsRequired(Boolean(body.httpsRequired));
     setWechat(body.wechat || null);
     setAppId(body.wechat?.appId || "");
+    setToken(body.wechat?.token || "");
+    setAesKey(body.wechat?.aesKey || "");
     setEnabled(Boolean(body.wechat?.enabled));
     onStatus?.(Boolean(body.wechat?.enabled));
   }
-  useEffect(() => { void load(); }, []);
+  async function loadEvents() {
+    const { res, body } = await api<{ events?: ChannelEvent[] }>("/api/admin/channels/events?kind=wechat_mp");
+    if (res.ok) setEvents(body.events || []);
+  }
+  useEffect(() => { void load(); void loadEvents(); }, []);
+
+  async function patch(payload: Record<string, unknown>) {
+    setBusy(true);
+    setErr("");
+    const { res, body } = await api<{
+      callbackUrl?: string;
+      httpsRequired?: boolean;
+      wechat?: WechatChannel | null;
+      error?: string;
+    }>("/api/admin/channels", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "wechat_mp", ...payload }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      setErr(body.error || t("settings.saveFailed"));
+      return false;
+    }
+    setCallbackUrl(body.callbackUrl || callbackUrl);
+    setHttpsRequired(Boolean(body.httpsRequired));
+    setWechat(body.wechat || null);
+    setAppId(body.wechat?.appId || appId);
+    if (body.wechat?.token) setToken(body.wechat.token);
+    if (body.wechat?.aesKey !== undefined) setAesKey(body.wechat.aesKey || "");
+    setEnabled(Boolean(body.wechat?.enabled));
+    onStatus?.(Boolean(body.wechat?.enabled));
+    void loadEvents();
+    return true;
+  }
 
   return (
     <div>
-      <h3>{t("connect.wechat_mp")}</h3>
-      <p className="sub">{t("channels.sub")}</p>
-      <p className="sub">{t("channels.replyWhere")}</p>
-      {wechat && !wechat.pushReady ? <p className="err">{t("channels.pushNeedSecret")}</p> : null}
-      {wechat?.lastPushError ? <p className="err">{t("channels.lastPush", { error: wechat.lastPushError })}</p> : null}
-      <label>{t("channels.callback")}</label>
-      <p>
-        <code className="mono">{callbackUrl || "—"}</code>{" "}
-        {callbackUrl ? (
-          <button className="btn btn-secondary btn-sm" type="button" onClick={() => copy(callbackUrl, t("keys.copied"))}>
-            {t("channels.copyUrl")}
-          </button>
-        ) : null}
-      </p>
-      {httpsRequired ? <p className="err">{t("channels.httpsNeed")}</p> : null}
-      <label>{t("channels.appId")}</label>
-      <input className="mono" value={appId} onChange={(e) => setAppId(e.target.value)} />
-      <label>{t("channels.appSecret")}</label>
-      <input
-        className="mono"
-        type="password"
-        value={appSecret}
-        placeholder={wechat?.secretSet ? t("channels.secretKeep") : ""}
-        onChange={(e) => setAppSecret(e.target.value)}
-      />
-      <label>{t("channels.token")}</label>
-      <input className="mono" value={token} placeholder={wechat?.tokenSet ? t("channels.secretKeep") : ""} onChange={(e) => setToken(e.target.value)} />
-      <label>{t("channels.aes")}</label>
-      <input className="mono" value={aesKey} placeholder={wechat?.aesSet ? t("channels.secretKeep") : ""} onChange={(e) => setAesKey(e.target.value)} />
-      <p style={{ marginTop: 12 }}>
-        <label>
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> {t("channels.enable")}
+      <div className="channel-head">
+        <div>
+          <h3>{t("connect.wechat_mp")}</h3>
+          <p className="sub">{t("channels.sub")}</p>
+        </div>
+        <label className="channel-enable">
+          <button
+            type="button"
+            className={`switch${enabled ? " on" : ""}`}
+            aria-pressed={enabled}
+            disabled={busy}
+            onClick={async () => {
+              if (!enabled && !(token || wechat?.tokenSet)) {
+                setErr(t("channels.enableHint"));
+                return;
+              }
+              const ok = await patch({ enabled: !enabled });
+              if (ok) flash(t("channels.saved"));
+            }}
+          />
+          {t("channels.enable")}
         </label>
-      </p>
-      <p className="err">{err}</p>
-      <p style={{ margin: "16px 0 0" }}>
-        <button
-          className="btn"
-          type="button"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            setErr("");
-            const { res, body } = await api<{
-              callbackUrl?: string;
-              httpsRequired?: boolean;
-              wechat?: WechatChannel | null;
-              error?: string;
-            }>("/api/admin/channels", {
-              method: "PATCH",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                kind: "wechat_mp",
+      </div>
+      <details>
+        <summary className="sub">{t("channels.replyWhere")}</summary>
+      </details>
+      {wechat && !wechat.pushReady && enabled ? <p className="err">{t("channels.pushNeedSecret")}</p> : null}
+      {wechat?.lastPushError ? <p className="err">{t("channels.lastPush", { error: wechat.lastPushError })}</p> : null}
+
+      <div className="channel-sec">
+        <h4>{t("channels.sectionAccess")}</h4>
+        <div className="secret-row">
+          <span className="secret-k">{t("channels.callback")}</span>
+          <code className="secret-v mono">{callbackUrl || "—"}</code>
+          <span className="secret-actions">
+            {callbackUrl ? (
+              <button className="btn btn-secondary btn-sm" type="button" onClick={() => copy(callbackUrl, t("keys.copied"))}>
+                {t("home.copy")}
+              </button>
+            ) : null}
+          </span>
+        </div>
+        {httpsRequired ? <p className="err">{t("channels.httpsNeed")}</p> : null}
+      </div>
+
+      <div className="channel-sec">
+        <h4>{t("channels.sectionCreds")}</h4>
+        <label>{t("channels.appId")}</label>
+        <input className="mono" value={appId} onChange={(e) => setAppId(e.target.value)} />
+        <label>{t("channels.appSecret")}</label>
+        {wechat?.secretPrefix && !showSecret && !appSecret ? (
+          <div className="secret-row">
+            <span className="secret-k" />
+            <code className="secret-v mono">{t("channels.savedMask", { mask: wechat.secretPrefix })}</code>
+            <span className="secret-actions">
+              <button className="btn btn-secondary btn-sm" type="button" onClick={() => setShowSecret(true)}>
+                {t("channels.replace")}
+              </button>
+            </span>
+          </div>
+        ) : (
+          <input
+            className="mono"
+            type={showSecret ? "text" : "password"}
+            value={appSecret}
+            placeholder={wechat?.secretSet ? t("channels.secretKeep") : ""}
+            onChange={(e) => setAppSecret(e.target.value)}
+          />
+        )}
+        <label>{t("channels.token")}</label>
+        <div className="secret-row">
+          <span className="secret-k" />
+          <code className="secret-v mono">{token || "—"}</code>
+          <span className="secret-actions">
+            {token ? (
+              <button className="btn btn-secondary btn-sm" type="button" onClick={() => copy(token, t("keys.copied"))}>
+                {t("home.copy")}
+              </button>
+            ) : null}
+            <button
+              className="btn btn-secondary btn-sm"
+              type="button"
+              onClick={() => {
+                const next = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+                setToken(next);
+              }}
+            >
+              {t("channels.generate")}
+            </button>
+          </span>
+        </div>
+        <input className="mono" value={token} onChange={(e) => setToken(e.target.value)} placeholder={t("channels.token")} />
+        <label>{t("channels.aes")}</label>
+        <div className="secret-row">
+          <span className="secret-k" />
+          <code className="secret-v mono">{aesKey || "—"}</code>
+          <span className="secret-actions">
+            {aesKey ? (
+              <button className="btn btn-secondary btn-sm" type="button" onClick={() => copy(aesKey, t("keys.copied"))}>
+                {t("home.copy")}
+              </button>
+            ) : null}
+          </span>
+        </div>
+        <input className="mono" value={aesKey} onChange={(e) => setAesKey(e.target.value)} placeholder={t("channels.aes")} />
+        <p className="err">{err}</p>
+        <p style={{ margin: "12px 0 0" }}>
+          <button
+            className="btn"
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              const ok = await patch({
                 appId,
                 appSecret: appSecret || undefined,
                 token: token || undefined,
                 aesKey: aesKey || undefined,
-                enabled,
-              }),
-            });
-            setBusy(false);
-            if (!res.ok) {
-              setErr(body.error || t("settings.saveFailed"));
-              return;
-            }
-            setAppSecret("");
-            setToken("");
-            setAesKey("");
-            setCallbackUrl(body.callbackUrl || callbackUrl);
-            setHttpsRequired(Boolean(body.httpsRequired));
-            setWechat(body.wechat || null);
-            setAppId(body.wechat?.appId || appId);
-            setEnabled(Boolean(body.wechat?.enabled));
-            onStatus?.(Boolean(body.wechat?.enabled));
-            flash(t("channels.saved"));
-          }}
-        >
-          {busy ? t("settings.saving") : t("settings.save")}
-        </button>
-      </p>
+              });
+              if (ok) {
+                setAppSecret("");
+                setShowSecret(false);
+                flash(t("channels.saved"));
+              }
+            }}
+          >
+            {busy ? t("settings.saving") : t("settings.save")}
+          </button>
+        </p>
+      </div>
+
+      <div className="channel-sec">
+        <h4>{t("channels.sectionLog")}</h4>
+        {events.length === 0 ? (
+          <p className="sub">{t("channels.noLog")}</p>
+        ) : (
+          <ul className="channel-log">
+            {events.map((e, i) => (
+              <li key={`${e.at}-${i}`}>
+                <time>{fmtWhen(e.at, t)}</time>
+                <span className={`lv-${e.level}`}>{e.event}</span>
+                <span className="log-d" title={e.detail}>{e.detail || ""}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }
@@ -1789,6 +1898,35 @@ function WechatBotAdmin({
           </button>
         ) : null}
       </p>
+      <WechatBotLog t={t} />
+    </div>
+  );
+}
+
+function WechatBotLog({ t }: { t: (k: string, v?: Record<string, string | number>) => string }) {
+  const [events, setEvents] = useState<ChannelEvent[]>([]);
+  useEffect(() => {
+    void (async () => {
+      const { res, body } = await api<{ events?: ChannelEvent[] }>("/api/admin/channels/events?kind=wechat_bot");
+      if (res.ok) setEvents(body.events || []);
+    })();
+  }, []);
+  return (
+    <div className="channel-sec">
+      <h4>{t("channels.sectionLog")}</h4>
+      {events.length === 0 ? (
+        <p className="sub">{t("channels.noLog")}</p>
+      ) : (
+        <ul className="channel-log">
+          {events.map((e, i) => (
+            <li key={`${e.at}-${i}`}>
+              <time>{fmtWhen(e.at, t)}</time>
+              <span className={`lv-${e.level}`}>{e.event}</span>
+              <span className="log-d" title={e.detail}>{e.detail || ""}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

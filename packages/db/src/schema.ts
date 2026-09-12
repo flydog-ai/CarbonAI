@@ -134,6 +134,18 @@ CREATE TABLE IF NOT EXISTS channel_bindings (
 
 CREATE UNIQUE INDEX IF NOT EXISTS channel_bindings_peer ON channel_bindings(account_id, peer_id);
 CREATE INDEX IF NOT EXISTS channel_bindings_user ON channel_bindings(account_id, user_id);
+
+CREATE TABLE IF NOT EXISTS channel_events (
+  id          TEXT PRIMARY KEY,
+  account_id  TEXT NOT NULL,
+  kind        TEXT NOT NULL,
+  level       TEXT NOT NULL,
+  event       TEXT NOT NULL,
+  detail      TEXT,
+  created_at  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS channel_events_kind_at ON channel_events(kind, created_at DESC);
 `;
 
 export type JobRow = {
@@ -227,6 +239,16 @@ export type ChannelBindingRow = {
   account_id: string;
   user_id: string;
   peer_id: string;
+  created_at: number;
+};
+
+export type ChannelEventRow = {
+  id: string;
+  account_id: string;
+  kind: string;
+  level: string;
+  event: string;
+  detail: string | null;
   created_at: number;
 };
 

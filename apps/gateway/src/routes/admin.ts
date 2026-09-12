@@ -82,6 +82,13 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, c
     });
   });
 
+  app.get("/api/admin/channels/events", (c) => {
+    if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
+    if (!channels) return c.json({ error: "unavailable" }, 503);
+    const kind = c.req.query("kind") || "wechat_mp";
+    return c.json({ events: channels.listEvents(kind) });
+  });
+
   app.patch("/api/admin/channels", async (c) => {
     if (!superadmin(c)) return c.json({ error: "forbidden" }, 403);
     if (!channels) return c.json({ error: "unavailable" }, 503);
@@ -95,14 +102,19 @@ export function adminRoutes(cfg: Config, db: CarbonDb, sessions: UserSessions, c
       enabled?: boolean;
     };
     if (body.kind && body.kind !== "wechat_mp") return c.json({ error: "unsupported channel" }, 400);
-    const wechat = channels.upsertWechat({
-      label: body.label,
-      appId: body.appId,
-      appSecret: body.appSecret,
-      token: body.token,
-      aesKey: body.aesKey,
-      enabled: body.enabled,
-    });
+    let wechat;
+    try {
+      wechat = channels.upsertWechat({
+        label: body.label,
+        appId: body.appId,
+        appSecret: body.appSecret,
+        token: body.token,
+        aesKey: body.aesKey,
+        enabled: body.enabled,
+      });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "save failed" }, 400);
+    }
     return c.json({
       ...channels.callbackInfo(c.req.url),
       wechat,

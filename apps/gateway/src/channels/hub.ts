@@ -1,5 +1,5 @@
 import type { Config } from "@carbon-ai/config";
-import { newBindingId, newChannelId, type CarbonDb } from "@carbon-ai/db";
+import { newBindingId, newChannelEventId, newChannelId, type CarbonDb } from "@carbon-ai/db";
 import { siteOrigin } from "../home/cc-switch.ts";
 import type { JobEngine, JobSummary } from "../job/engine.ts";
 import {
@@ -43,6 +43,16 @@ export type ChannelPublic = {
   bound: number;
   pushReady: boolean;
   lastPushError?: string;
+  token?: string;
+  aesKey?: string;
+  secretPrefix?: string;
+};
+
+export type ChannelEventView = {
+  at: number;
+  level: string;
+  event: string;
+  detail?: string;
 };
 
 export type WechatBotPublic = {
@@ -73,6 +83,12 @@ function newCode(): string {
     n >>>= 5;
   }
   return `BIND-${body}`;
+}
+
+function maskSecret(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value.length <= 8) return "••••";
+  return `${value.slice(0, 2)}••••${value.slice(-4)}`;
 }
 
 function liveJobs(engine: JobEngine): JobSummary[] {
@@ -136,7 +152,36 @@ export class ChannelHub {
       bound: this.db.channels.listBindings(row.id).length,
       pushReady: Boolean(row.app_id && row.app_secret && row.enabled === 1),
       lastPushError: this.lastPushError,
+      token: row.token || undefined,
+      aesKey: row.aes_key || undefined,
+      secretPrefix: maskSecret(row.app_secret),
     };
+  }
+
+  listEvents(kind: string): ChannelEventView[] {
+    return this.db.channels.listEvents(kind, 30).map((e) => ({
+      at: e.created_at,
+      level: e.level,
+      event: e.event,
+      detail: e.detail ?? undefined,
+    }));
+  }
+
+  note(kind: string, level: "info" | "warn" | "error", event: string, detail?: string): void {
+    try {
+      const account = this.db.channels.getByKind(kind);
+      this.db.channels.addEvent({
+        id: newChannelEventId(),
+        account_id: account?.id ?? "",
+        kind,
+        level,
+        event,
+        detail: detail ?? null,
+        created_at: this.now(),
+      });
+    } catch {
+      /* logging must not break the channel */
+    }
   }
 
   upsertWechat(input: {
@@ -157,6 +202,7 @@ export class ChannelHub {
     const aes =
       input.aesKey !== undefined ? (input.aesKey?.trim() || null) : (current?.aes_key ?? null);
     const enabled = input.enabled === undefined ? (current?.enabled ?? 0) : input.enabled ? 1 : 0;
+    if (enabled && !token) throw new Error("token required");
     const label = (input.label ?? current?.label ?? "WeChat MP").trim() || "WeChat MP";
     this.db.channels.upsertByKind({
       id: current?.id ?? newChannelId(),
@@ -172,6 +218,7 @@ export class ChannelHub {
       sync_buf: current?.sync_buf ?? null,
     });
     this.accessToken = undefined;
+    if (input.enabled !== undefined) this.note(KIND, "info", enabled ? "enabled" : "disabled");
     return this.publicWechat()!;
   }
 
@@ -288,6 +335,7 @@ export class ChannelHub {
       }
       this.qrSessions.delete(sessionKey);
       this.restartBotMonitor();
+      this.note(KIND_BOT, "info", "login", st.ilink_bot_id);
       return { status: "confirmed", connected: true, wechatBot: this.publicWechatBot()! };
     }
     if (st.status === "expired" || st.status === "binded_redirect") {
@@ -377,9 +425,11 @@ export class ChannelHub {
         try {
           await this.sendCustom(mp.app_id, mp.app_secret, b.peer_id, text);
           this.lastPushError = undefined;
+          this.note(KIND, "info", "push", `ok ${b.peer_id.slice(0, 8)}`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           this.lastPushError = msg;
+          this.note(KIND, "error", "push", msg);
           console.warn(`wechat mp push failed peer=${b.peer_id}: ${msg}`);
         }
       }
@@ -564,6 +614,8 @@ export class ChannelHub {
     try {
       await this.engine.completeFromTest(job.id, [{ type: "text", text: body }], { sessionId: user.id });
       this.lastJob.delete(fromUser);
+      const acc = this.db.channels.getById(accountId);
+      this.note(acc?.kind || KIND, "info", "reply", body.slice(0, 80));
       return "已回复到会话。";
     } catch (err) {
       return err instanceof Error ? err.message : "回复失败。";
@@ -587,6 +639,8 @@ export class ChannelHub {
       peer_id: openid,
       created_at: this.now(),
     });
+    const acc = this.db.channels.getById(accountId);
+    this.note(acc?.kind || KIND, "info", "bind", user.username);
     return `已绑定 ${user.username}。
 回复位置：微信里打开本公众号的对话（不是控制台，也不是别的 Bot）。
 订阅号通常不能主动推送。有新会话时请在这里发「列表」，然后直接打字回复。`;

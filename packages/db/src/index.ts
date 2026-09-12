@@ -5,12 +5,13 @@ export { UserRepo, newApiKeyId, newUser } from "./users.ts";
 export { SessionRepo } from "./sessions.ts";
 export { SettingsRepo } from "./settings.ts";
 export { VisitorRepo, newVisitorId, newVisitorShortId } from "./visitors.ts";
-export { ChannelRepo, newChannelId, newBindingId } from "./channels.ts";
+export { ChannelRepo, newChannelId, newBindingId, newChannelEventId } from "./channels.ts";
 export type {
   ApiKeyRow,
   BlobRow,
   ChannelAccountRow,
   ChannelBindingRow,
+  ChannelEventRow,
   JobRow,
   SessionRow,
   UserRole,

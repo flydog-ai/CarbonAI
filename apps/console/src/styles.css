@@ -639,6 +639,37 @@ tr:hover td { background: var(--hover); }
 .connect-st.on { background: var(--ok-bg); color: var(--ok); }
 .connect-panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 18px 20px; min-height: 360px; }
 .connect-panel h3 { margin: 0 0 8px; font-size: 15px; }
+.channel-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px;
+}
+.channel-head h3 { margin: 0; }
+.channel-enable { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.channel-sec { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.channel-sec h4 { margin: 0 0 10px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.secret-row {
+  display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 8px; align-items: center;
+  margin-bottom: 8px;
+}
+.secret-row .secret-k { font-size: 12px; color: var(--muted); font-weight: 600; }
+.secret-row .secret-v {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: var(--code-bg); border-radius: 8px; padding: 6px 10px; font-size: 12px;
+}
+.secret-row .secret-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.channel-log { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; }
+.channel-log li {
+  display: grid; grid-template-columns: 92px 64px minmax(0, 1fr); gap: 8px;
+  font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--line);
+}
+.channel-log time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.channel-log .lv-info { color: var(--ok); }
+.channel-log .lv-warn { color: #b8860b; }
+.channel-log .lv-error { color: var(--danger); }
+.channel-log .log-d { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 800px) {
+  .secret-row { grid-template-columns: 1fr; }
+  .channel-log li { grid-template-columns: 1fr; gap: 2px; }
+}
 @media (max-width: 800px) {
   .connect-layout { grid-template-columns: 1fr; }
   .connect-list { position: static; display: flex; gap: 6px; overflow: auto; padding: 8px; }
