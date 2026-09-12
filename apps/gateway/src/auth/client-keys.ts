@@ -81,8 +81,18 @@ export function hashApiKey(plaintext: string): string {
   return sha256(plaintext).toString("hex");
 }
 
+/** `sk-carbon-` plus 16 base64url chars (12 random bytes). 26 chars total.
+ *  Stays above common client floors: non-empty (Claude Code, Codex, CC Switch),
+ *  ≥16 overall (some OpenAI gateways), and `sk-` + ≥20 chars (Authsome-style forms).
+ */
+export const MINTED_API_KEY_RE = /^sk-carbon-[A-Za-z0-9_-]{16}$/;
+
+export function isMintedApiKey(value: string): boolean {
+  return MINTED_API_KEY_RE.test(value);
+}
+
 export function mintApiKeyPlaintext(): string {
-  const bytes = new Uint8Array(24);
+  const bytes = new Uint8Array(12);
   crypto.getRandomValues(bytes);
   return `sk-carbon-${Buffer.from(bytes).toString("base64url")}`;
 }

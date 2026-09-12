@@ -59,6 +59,7 @@ describe("guest visitors", () => {
       const html1 = await first.text();
       const key1 = homeKey(html1);
       expect(key1.startsWith("sk-carbon-")).toBe(true);
+      expect(key1).toHaveLength(26);
       expect(key1).not.toBe("sk-carbon-local");
       expect(html1).toContain("operator's default key");
 

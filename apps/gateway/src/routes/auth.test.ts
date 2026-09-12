@@ -103,6 +103,7 @@ describe("user accounts phase 1", () => {
       expect(created.user.username).toBe("alice");
       expect(created.user.canReply).toBe(true);
       expect(created.apiKey.startsWith("sk-carbon-")).toBe(true);
+      expect(created.apiKey).toHaveLength(26);
 
       const models = await fetch(`${url}/v1/models`, {
         headers: { "x-api-key": created.apiKey, "anthropic-version": "2023-06-01" },

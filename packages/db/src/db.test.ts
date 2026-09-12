@@ -108,7 +108,7 @@ describe("users", () => {
     db.close();
   });
 
-  test("siteDeskKeyPlain is the oldest live key on the superadmin desk", async () => {
+  test("siteDeskKeyPlain prefers a compact mint, else the oldest live key", async () => {
     const db = openDatabase(tmp());
     const admin = await newUser({ username: "admin", password: "password1", role: "superadmin", canReply: true });
     const ada = await newUser({ username: "ada", password: "password1", canReply: true });
@@ -147,9 +147,21 @@ describe("users", () => {
     });
     expect(db.users.siteDeskId()).toBe(admin.id);
     expect(db.users.siteDeskKeyPlain()).toBe("sk-admin-old");
+    const compact = "sk-carbon-abcdefghijklmnop";
+    db.users.insertKey({
+      id: newApiKeyId(),
+      user_id: admin.id,
+      label: "default",
+      key_hash: createHash("sha256").update(compact).digest("hex"),
+      key_prefix: "sk-carbon-ab...mnop",
+      key_plain: compact,
+      created_at: now + 20,
+      revoked_at: null,
+    });
+    expect(db.users.siteDeskKeyPlain()).toBe(compact);
     const doomed = db.users.listKeys(admin.id).find((k) => k.key_plain === "sk-admin-old")!;
-    db.users.revokeKey(doomed.id, now + 20);
-    expect(db.users.siteDeskKeyPlain()).toBe("sk-admin-new");
+    db.users.revokeKey(doomed.id, now + 30);
+    expect(db.users.siteDeskKeyPlain()).toBe(compact);
     db.close();
   });
 });

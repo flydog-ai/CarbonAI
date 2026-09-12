@@ -2,10 +2,34 @@ import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { Config } from "@carbon-ai/config";
 import { newApiKeyId, newUser, type CarbonDb } from "@carbon-ai/db";
-import { apiKeyPrefix, hashApiKey, mintApiKeyPlaintext } from "./client-keys.ts";
+import { apiKeyPrefix, hashApiKey, isMintedApiKey, mintApiKeyPlaintext } from "./client-keys.ts";
+
+function insertLiveKey(db: CarbonDb, userId: string, plaintext: string, createdAt = Date.now()): void {
+  db.users.insertKey({
+    id: newApiKeyId(),
+    user_id: userId,
+    label: "default",
+    key_hash: hashApiKey(plaintext),
+    key_prefix: apiKeyPrefix(plaintext),
+    key_plain: plaintext,
+    created_at: createdAt,
+    revoked_at: null,
+  });
+}
+
+/** Existing desks keep their long keys; homepage prefers a compact mint once one exists. */
+export function ensureCompactSiteDeskKey(db: CarbonDb): void {
+  const id = db.users.siteDeskId();
+  if (!id) return;
+  if (db.users.listKeys(id).some((k) => k.key_plain && isMintedApiKey(k.key_plain))) return;
+  insertLiveKey(db, id, mintApiKeyPlaintext());
+}
 
 export async function ensureBootstrapAdmin(cfg: Config, db: CarbonDb): Promise<void> {
-  if (db.users.count() > 0) return;
+  if (db.users.count() > 0) {
+    ensureCompactSiteDeskKey(db);
+    return;
+  }
   const username = cfg.auth.bootstrapUsername || "admin";
   const password = cfg.auth.bootstrapPassword;
   if (!password) {
@@ -15,16 +39,7 @@ export async function ensureBootstrapAdmin(cfg: Config, db: CarbonDb): Promise<v
   const user = await newUser({ username, password, role: "superadmin", canReply: true });
   db.users.insert(user);
   const plaintext = mintApiKeyPlaintext();
-  db.users.insertKey({
-    id: newApiKeyId(),
-    user_id: user.id,
-    label: "default",
-    key_hash: hashApiKey(plaintext),
-    key_prefix: apiKeyPrefix(plaintext),
-    key_plain: plaintext,
-    created_at: Date.now(),
-    revoked_at: null,
-  });
+  insertLiveKey(db, user.id, plaintext);
   console.log(`superadmin username: ${username}`);
   console.log("superadmin password: (from carbon.toml / CARBON_BOOTSTRAP_PASSWORD)");
   console.log(`superadmin api key:\n${plaintext}`);
