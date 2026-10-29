@@ -116,8 +116,34 @@ export function operatorRoutes(cfg: Config, engine: JobEngine, db: CarbonDb, use
       if (!owns(engine.get(id).ownerId, session.id)) return c.json({ error: "not found" }, 404);
       const body = await readJsonCapped(c.req.raw, cfg.server.maxBodyBytes);
       const req = engine.normalized(id);
-      const blocks = blocksFromReply(req.tools, body);
+      let blocks;
+      try {
+        blocks = blocksFromReply(req.tools, body);
+      } catch (err) {
+        if (err instanceof ToolDraftError && err.message === "text or tools required") blocks = [];
+        else throw err;
+      }
       const output = await engine.completeFromTest(id, blocks, { sessionId: session.id });
+      return c.json(output);
+    } catch (err) {
+      if (err instanceof ToolDraftError) return c.json({ error: err.message }, 400);
+      if (err instanceof JobNotFoundError) return c.json({ error: err.message }, 404);
+      if (err instanceof JobConflictError) return c.json({ error: err.message }, 409);
+      throw err;
+    }
+  });
+
+  app.post("/api/operator/jobs/:id/say", async (c) => {
+    const session = requireReply(c);
+    if (session === "forbidden") return c.json({ error: "no reply permission" }, 403);
+    if (!session) return c.json({ error: "unauthorized" }, 401);
+    const id = c.req.param("id");
+    try {
+      if (!owns(engine.get(id).ownerId, session.id)) return c.json({ error: "not found" }, 404);
+      const body = await readJsonCapped(c.req.raw, cfg.server.maxBodyBytes);
+      const req = engine.normalized(id);
+      const blocks = blocksFromReply(req.tools, body);
+      const output = await engine.say(id, blocks, { sessionId: session.id });
       return c.json(output);
     } catch (err) {
       if (err instanceof ToolDraftError) return c.json({ error: err.message }, 400);

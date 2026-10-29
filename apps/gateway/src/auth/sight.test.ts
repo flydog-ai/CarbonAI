@@ -1,11 +1,28 @@
 import { describe, expect, test } from "bun:test";
-import { canonicalIp, inferClientKind, presenceOf, visitorFingerprint } from "./sight.ts";
+import { canonicalIp, inferClientKind, presenceOf, resolveClientIp, visitorFingerprint } from "./sight.ts";
 
 describe("canonicalIp", () => {
   test("folds loopback forms", () => {
     expect(canonicalIp("::1")).toBe("127.0.0.1");
     expect(canonicalIp("[::1]")).toBe("127.0.0.1");
     expect(canonicalIp("::ffff:203.0.113.4")).toBe("203.0.113.4");
+  });
+});
+
+describe("resolveClientIp", () => {
+  test("loopback peer keeps the proxy's real client ip and user-agent pair", () => {
+    expect(
+      resolveClientIp("127.0.0.1", { realIp: "144.0.23.52", forwardedFor: "10.0.0.8, 144.0.23.52" }, true),
+    ).toBe("144.0.23.52");
+    expect(resolveClientIp("::1", { forwardedFor: "203.0.113.9" }, true)).toBe("203.0.113.9");
+  });
+
+  test("a direct public peer does not take a spoofed forwarding header", () => {
+    expect(resolveClientIp("203.0.113.4", { realIp: "198.51.100.2" }, false)).toBe("203.0.113.4");
+  });
+
+  test("missing forwarding headers stay on loopback", () => {
+    expect(resolveClientIp("127.0.0.1", {}, true)).toBe("127.0.0.1");
   });
 });
 

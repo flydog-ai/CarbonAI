@@ -130,6 +130,55 @@ describe("operator desk", () => {
     });
   });
 
+  test("say keeps the composer turn open until complete", async () => {
+    await withSrv(async (url) => {
+      const login = await fetch(`${url}/api/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "admin", password: "password1" }),
+      });
+      const auth = { cookie: cookieFrom(login) };
+      const created = await fetch(`${url}/debug/jobs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ stream: true, text: "hello from client" }),
+      });
+      const job = (await created.json()) as { id: string };
+      const sse = fetch(`${url}/debug/jobs/${job.id}/stream`);
+      await Bun.sleep(40);
+
+      const first = await fetch(`${url}/api/operator/jobs/${job.id}/say`, {
+        method: "POST",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({ text: "one" }),
+      });
+      expect(first.status).toBe(200);
+      const still = await fetch(`${url}/api/operator/jobs/${job.id}`, { headers: auth });
+      const row = (await still.json()) as { status: string };
+      expect(row.status).toBe("streaming");
+
+      const second = await fetch(`${url}/api/operator/jobs/${job.id}/say`, {
+        method: "POST",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({ text: "two" }),
+      });
+      expect(second.status).toBe(200);
+      const mid = (await second.json()) as { blocks: { type: string; text?: string }[] };
+      expect(mid.blocks.filter((b) => b.type === "text").map((b) => b.text)).toEqual(["one", "two"]);
+
+      const done = await fetch(`${url}/api/operator/jobs/${job.id}/complete`, {
+        method: "POST",
+        headers: { ...auth, "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(done.status).toBe(200);
+      const sseRes = await sse;
+      const body = await sseRes.text();
+      expect(body).toContain("one");
+      expect(body).toContain("two");
+    });
+  });
+
   test("context lists client tools; complete can emit a tool_use turn", async () => {
     await withSrv(async (url, engine) => {
       const login = await fetch(`${url}/api/auth/login`, {

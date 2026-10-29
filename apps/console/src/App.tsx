@@ -16,7 +16,7 @@ import {
   ThemeSwitch,
 } from "./components.tsx";
 import { detectLang, translate } from "./i18n.ts";
-import { callerTitle, copyText, filterTools, formatParams, fmtWhen, groupThreads, initials, isLive, readView, secretPrefix, setViewUrl, threadKey } from "./lib.ts";
+import { callerTitle, copyText, enterSends, filterTools, formatParams, fmtWhen, groupThreads, initials, isLive, readView, secretPrefix, setViewUrl, threadKey } from "./lib.ts";
 import { ChatItem } from "./ChatItem.tsx";
 import { pendingFromTool, ToolDraftCard, type PendingTool } from "./ToolDraft.tsx";
 import { Mark } from "./brand/Mark.tsx";
@@ -917,7 +917,7 @@ function Sessions({
   const openTools = useCallback(() => setToolsOpen(true), []);
   const closeTools = useCallback(() => setToolsOpen(false), []);
 
-  async function sendReply() {
+  async function sendReply(end: boolean) {
     setErr("");
     if (!selectedRow) {
       setErr(t("desk.pickFirst"));
@@ -925,14 +925,19 @@ function Sessions({
     }
     const text = draft.trim();
     const tools = pending.map((p) => ({ name: p.name, kind: p.kind, input: p.input }));
-    if (!text && tools.length === 0) {
+    const alreadySent = you.some((b) => b.source === "reply") || head?.status === "streaming";
+    if (!text && tools.length === 0 && !(end && alreadySent)) {
       setErr(t("desk.needReply"));
       return;
     }
+    const finishing = end || tools.length > 0;
     setSending(true);
     const { res, body } = await api<{ error?: string }>(
-      `/api/operator/jobs/${selectedRow.id}/complete`,
-      jsonBody({ text: draft, tools: tools.length ? tools : undefined }),
+      `/api/operator/jobs/${selectedRow.id}/${finishing ? "complete" : "say"}`,
+      jsonBody({
+        text: text ? draft : undefined,
+        tools: tools.length ? tools : undefined,
+      }),
     );
     setSending(false);
     if (!res.ok) {
@@ -941,6 +946,11 @@ function Sessions({
     }
     setDraft("");
     setPending([]);
+    if (!finishing) {
+      await loadChat(selectedRow.id, true);
+      await refresh();
+      return;
+    }
     openedSig.current = "";
     await refresh();
   }
@@ -977,6 +987,7 @@ function Sessions({
                 <time>{fmtWhen(j.createdAt, t)}</time>
               </span>
               {kindLabel(t, j.clientKind) ? <span className="conv-kind">{kindLabel(t, j.clientKind)}</span> : null}
+              {j.queued && j.queued > 1 ? <span className="conv-kind">{t("desk.queued", { n: j.queued })}</span> : null}
               <span className="conv-prev">{j.lastUserPreview || t("desk.noUserText")}</span>
             </span>
             {isLive(j) ? <span className="conv-dot" title={t("desk.waiting")} /> : null}
@@ -1054,11 +1065,20 @@ function Sessions({
                     disabled={sending}
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={(e) => {
-                      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void sendReply();
+                      if (!enterSends({
+                        key: e.key,
+                        shiftKey: e.shiftKey,
+                        isComposing: e.nativeEvent.isComposing,
+                        keyCode: e.nativeEvent.keyCode,
+                      })) return;
+                      e.preventDefault();
+                      if (!draft.trim() && pending.length === 0) return;
+                      void sendReply(false);
                     }}
                   />
                   <div className="composer-actions">
-                    <button className="btn" type="button" disabled={sending} onClick={() => void sendReply()}>{t("desk.send")}</button>
+                    <button className="btn" type="button" disabled={sending} onClick={() => void sendReply(false)}>{t("desk.send")}</button>
+                    <button className="btn btn-secondary" type="button" disabled={sending} onClick={() => void sendReply(true)}>{t("desk.finish")}</button>
                     <button
                       className="btn btn-secondary"
                       type="button"

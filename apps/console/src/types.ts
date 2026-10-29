@@ -55,6 +55,7 @@ export type Job = {
   lastUserPreview?: string;
   waitMs?: number;
   turnCount?: number;
+  queued?: number;
   createdAt: number;
   lastSeenAt?: number;
   presence?: Presence;

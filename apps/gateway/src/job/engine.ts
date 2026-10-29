@@ -6,6 +6,7 @@ import {
   emptyNormalizedRequest,
   eventsFromBlocks,
   estimateRequestTokens,
+  estimateTextTokens,
   fold,
   ids,
   lastUserPreview,
@@ -328,6 +329,27 @@ export class JobEngine {
     return Promise.resolve(this.terminalFromDb(jobId));
   }
 
+  /** Append one operator message. The client stays on this turn until `completeFromTest`. Tool calls end the turn. */
+  async say(
+    jobId: string,
+    blocks: AssistantBlock[],
+    opts: { sessionId?: string } = {},
+  ): Promise<AssistantOutput> {
+    if (blocks.length === 0) throw new JobConflictError("text or tools required");
+    const rt = this.require(jobId);
+    if (!LIVE.includes(rt.status)) throw new JobConflictError(`job ${jobId} already ${rt.status}`);
+    if (rt.stream) await rt.attached;
+
+    return this.lock(async () => {
+      const latest = this.require(jobId);
+      if (!LIVE.includes(latest.status)) throw new JobConflictError(`job ${jobId} already ${latest.status}`);
+      await this.writeBlocksUnlocked(latest, blocks, opts.sessionId);
+      if (latest.terminalSettled) throw new JobConflictError("sse write failed");
+      if (blocks.some((b) => b.type === "tool_use")) return this.finishTurnUnlocked(latest);
+      return fold(latest.events);
+    });
+  }
+
   async completeFromTest(
     jobId: string,
     blocks: AssistantBlock[],
@@ -341,49 +363,10 @@ export class JobEngine {
     return this.lock(async () => {
       const latest = this.require(jobId);
       if (!LIVE.includes(latest.status)) throw new JobConflictError(`job ${jobId} already ${latest.status}`);
-
-      if (latest.status === "pending") {
-        this.claimUnlocked(latest, opts.sessionId ?? "test");
-      }
-      latest.status = "streaming";
-      latest.claimedAt = this.now();
-      this.persistStatus(latest);
-
-      const events = eventsFromBlocks({
-        jobId: latest.id,
-        vendorMessageId: latest.vendorMessageId,
-        model: latest.model,
-        createdAt: latest.createdAt,
-        inputTokens: latest.inputTokens,
-        blocks,
-        stopReason: opts.stopReason,
-        request: latest.request,
-        emitEmptyReasoning: this.cfg.jobs.emitEmptyReasoning,
-      });
-      latest.events = events;
-      const output = fold(events);
-      latest.outputTokens = output.outputTokens;
-
-      if (latest.writer) {
-        const ctx = this.ctx(latest);
-        try {
-          for (const ev of events) {
-            await latest.adapter.apply(ctx, ev);
-          }
-          await latest.adapter.closeStream(ctx);
-        } catch {
-          this.finish(latest, { status: "cancelled", error: "write_fail" }, "write_fail");
-          throw new JobConflictError("sse write failed");
-        }
-      }
-
-      this.db.updateJob(latest.id, {
-        response_json: JSON.stringify(latest.adapter.toJson(output, latest.request)),
-        events_json: JSON.stringify(events),
-        output_tokens: output.outputTokens,
-      });
-      this.finish(latest, { status: "completed" });
-      return output;
+      if (blocks.length === 0 && !this.hasReply(latest)) throw new JobConflictError("text or tools required");
+      if (blocks.length > 0) await this.writeBlocksUnlocked(latest, blocks, opts.sessionId);
+      if (latest.terminalSettled) throw new JobConflictError("sse write failed");
+      return this.finishTurnUnlocked(latest, opts.stopReason);
     });
   }
 
@@ -696,6 +679,128 @@ export class JobEngine {
     const now = this.now();
     if (rt.visitorId) this.db.visitors.touch(rt.visitorId, { last_seen_at: now });
     if (rt.userId) this.db.users.touchLastSeen(rt.userId, now);
+  }
+
+  private hasReply(rt: Runtime): boolean {
+    return rt.events.some(
+      (e) =>
+        e.type === "text_delta" ||
+        e.type === "thinking_delta" ||
+        e.type === "tool_call_end" ||
+        e.type === "reasoning_item",
+    );
+  }
+
+  private nextBlockIndex(events: InternalEvent[]): number {
+    let max = -1;
+    for (const ev of events) {
+      if ("blockIndex" in ev && ev.blockIndex > max) max = ev.blockIndex;
+    }
+    return max + 1;
+  }
+
+  private replyTokens(blocks: AssistantBlock[]): number {
+    let n = 0;
+    for (const b of blocks) {
+      if (b.type === "text") n += estimateTextTokens(b.text);
+      else if (b.type === "thinking") n += estimateTextTokens(b.thinking);
+    }
+    return n;
+  }
+
+  private async pushEvents(rt: Runtime, events: InternalEvent[]): Promise<void> {
+    if (rt.writer && events.length > 0) {
+      const ctx = this.ctx(rt);
+      try {
+        for (const ev of events) await rt.adapter.apply(ctx, ev);
+      } catch {
+        this.finish(rt, { status: "cancelled", error: "write_fail" }, "write_fail");
+        throw new JobConflictError("sse write failed");
+      }
+    }
+    rt.events.push(...events);
+  }
+
+  /** Caller holds the job lock. Appends blocks and leaves the stream open. */
+  private async writeBlocksUnlocked(rt: Runtime, blocks: AssistantBlock[], sessionId?: string): Promise<void> {
+    this.claimUnlocked(rt, sessionId ?? "test");
+    rt.status = "streaming";
+    rt.claimedAt = this.now();
+    this.persistStatus(rt);
+
+    const preamble = !rt.events.some((e) => e.type === "job_start");
+    const built = eventsFromBlocks({
+      jobId: rt.id,
+      vendorMessageId: rt.vendorMessageId,
+      model: rt.model,
+      createdAt: rt.createdAt,
+      inputTokens: rt.inputTokens,
+      blocks,
+      request: rt.request,
+      emitEmptyReasoning: preamble ? this.cfg.jobs.emitEmptyReasoning : "never",
+    });
+    const base = this.nextBlockIndex(rt.events);
+    const adding: InternalEvent[] = [];
+    if (preamble) {
+      adding.push({
+        type: "job_start",
+        jobId: rt.id,
+        vendorMessageId: rt.vendorMessageId,
+        model: rt.model,
+        createdAt: rt.createdAt,
+        inputTokens: rt.inputTokens,
+      });
+    }
+    for (const ev of built) {
+      if (ev.type === "job_start" || ev.type === "stop") continue;
+      adding.push("blockIndex" in ev ? { ...ev, blockIndex: ev.blockIndex + base } : ev);
+    }
+    await this.pushEvents(rt, adding);
+    if (rt.terminalSettled) return;
+    const output = fold(rt.events);
+    rt.outputTokens = this.replyTokens(output.blocks);
+    this.db.updateJob(rt.id, {
+      status: rt.status,
+      claimed_by: rt.claimedBy ?? null,
+      claimed_at: rt.claimedAt ?? null,
+      response_json: JSON.stringify(rt.adapter.toJson({ ...output, outputTokens: rt.outputTokens }, rt.request)),
+      events_json: JSON.stringify(rt.events),
+      output_tokens: rt.outputTokens,
+    });
+  }
+
+  /** Caller holds the job lock. Closes the vendor stream so the client can continue. */
+  private async finishTurnUnlocked(rt: Runtime, stopReason?: StopReason): Promise<AssistantOutput> {
+    const partial = fold(rt.events);
+    const tokens = this.replyTokens(partial.blocks);
+    const hasTool = partial.blocks.some((b) => b.type === "tool_use");
+    await this.pushEvents(rt, [
+      {
+        type: "stop",
+        reason: stopReason ?? (hasTool ? "tool_use" : "end_turn"),
+        stopSequence: null,
+        outputTokens: tokens,
+        inputTokens: rt.inputTokens,
+      },
+    ]);
+    if (rt.terminalSettled) throw new JobConflictError("sse write failed");
+    const output = fold(rt.events);
+    rt.outputTokens = output.outputTokens;
+    if (rt.writer) {
+      try {
+        await rt.adapter.closeStream(this.ctx(rt));
+      } catch {
+        this.finish(rt, { status: "cancelled", error: "write_fail" }, "write_fail");
+        throw new JobConflictError("sse write failed");
+      }
+    }
+    this.db.updateJob(rt.id, {
+      response_json: JSON.stringify(rt.adapter.toJson(output, rt.request)),
+      events_json: JSON.stringify(rt.events),
+      output_tokens: rt.outputTokens,
+    });
+    this.finish(rt, { status: "completed" });
+    return output;
   }
 
   private persistStatus(rt: Runtime): void {

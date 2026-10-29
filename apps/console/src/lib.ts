@@ -21,8 +21,16 @@ export function isPresent(j: Job): boolean {
   return isLive(j) || j.presence === "live" || j.presence === "online";
 }
 
-export function threadKey(j: { id: string; threadId?: string }): string {
-  return j.threadId || j.id;
+/** Desk row. One device (visitor from IP + user-agent) is one session. Anonymous jobs fall back to the thread, then the job. */
+export function threadKey(j: { id: string; threadId?: string; visitorId?: string }): string {
+  return j.visitorId || j.threadId || j.id;
+}
+
+/** Enter sends. Shift+Enter inserts a newline. Ignore IME composition (keyCode 229). */
+export function enterSends(e: { key: string; shiftKey?: boolean; isComposing?: boolean; keyCode?: number }): boolean {
+  if (e.key !== "Enter" || e.shiftKey) return false;
+  if (e.isComposing || e.keyCode === 229) return false;
+  return true;
 }
 
 /** Space-separated tokens all match name, kind, or description. Empty query returns the same list. */
@@ -60,7 +68,11 @@ export function groupThreads(jobs: Job[]): Job[] {
       items.sort((a, b) => b.createdAt - a.createdAt);
       const live = items.filter(isLive);
       const latest = live[0] ?? items[0]!;
-      return { ...latest, turnCount: Math.max(...items.map((i) => i.turnCount || 1)) };
+      return {
+        ...latest,
+        turnCount: Math.max(...items.map((i) => i.turnCount || 1)),
+        queued: live.length,
+      };
     })
     .sort((a, b) => b.createdAt - a.createdAt);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { callerTitle, filterTools, formatParams, groupThreads, initials, isLive, secretPrefix, threadKey } from "./lib.ts";
+import { callerTitle, enterSends, filterTools, formatParams, groupThreads, initials, isLive, secretPrefix, threadKey } from "./lib.ts";
 import type { PublicTool } from "./types.ts";
 import type { Job } from "./types.ts";
 
@@ -12,9 +12,24 @@ function job(over: Partial<Job> & { id: string }): Job {
 }
 
 describe("thread grouping", () => {
-  test("threadKey prefers threadId", () => {
+  test("threadKey prefers the visitor, then the thread", () => {
     expect(threadKey({ id: "job_1" })).toBe("job_1");
     expect(threadKey({ id: "job_1", threadId: "thr_a" })).toBe("thr_a");
+    expect(threadKey({ id: "job_1", threadId: "thr_a", visitorId: "vis_a" })).toBe("vis_a");
+  });
+
+  test("same visitor collapses separate threads onto the live job", () => {
+    const rows = groupThreads([
+      job({ id: "a1", threadId: "thr_1", visitorId: "vis_a", status: "failed", createdAt: 1, lastUserPreview: "OK", turnCount: 1 }),
+      job({ id: "a2", threadId: "thr_2", visitorId: "vis_a", status: "pending", createdAt: 2, lastUserPreview: "OK again", turnCount: 1 }),
+      job({ id: "b1", threadId: "thr_3", visitorId: "vis_b", status: "completed", createdAt: 3, lastUserPreview: "other" }),
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.id).toBe("b1");
+    expect(rows[1]?.id).toBe("a2");
+    expect(rows[1]?.lastUserPreview).toBe("OK again");
+    expect(rows[1]?.queued).toBe(1);
+    expect(isLive(rows[1]!)).toBe(true);
   });
 
   test("same threadId collapses to the live job", () => {
@@ -39,6 +54,16 @@ describe("thread grouping", () => {
   test("callerTitle prefers the guest id", () => {
     expect(callerTitle({ callerLabel: "G-7K3M", clientLabel: "Claude Code" }, "Client")).toBe("G-7K3M");
     expect(callerTitle({ clientLabel: "alice" }, "Client")).toBe("alice");
+  });
+});
+
+describe("enterSends", () => {
+  test("Enter sends, Shift+Enter and IME confirmation do not", () => {
+    expect(enterSends({ key: "Enter" })).toBe(true);
+    expect(enterSends({ key: "Enter", shiftKey: true })).toBe(false);
+    expect(enterSends({ key: "Enter", isComposing: true })).toBe(false);
+    expect(enterSends({ key: "Enter", keyCode: 229 })).toBe(false);
+    expect(enterSends({ key: "a" })).toBe(false);
   });
 });
 

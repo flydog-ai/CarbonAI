@@ -28,17 +28,44 @@ function firstHop(value: string | undefined): string | undefined {
   return hop || undefined;
 }
 
-export function requestIp(c: Context, cfg: Config): string {
-  const env = c.env as FetchEnv | undefined;
-  const remote = canonicalIp(env?.remoteAddress ?? "");
-  if (cfg.server.host === "0.0.0.0") {
-    const forwarded =
-      firstHop(c.req.header("cf-connecting-ip") ?? undefined) ??
-      firstHop(c.req.header("x-real-ip") ?? undefined) ??
-      firstHop(c.req.header("x-forwarded-for") ?? undefined);
-    if (forwarded) return canonicalIp(forwarded);
+/**
+ * Peer address, unless a local reverse proxy is the peer.
+ * Loopback is not a device: nginx on this host sets X-Real-IP to the client.
+ * A public peer is trusted only when the process itself is bound open.
+ */
+export function resolveClientIp(
+  remoteRaw: string,
+  forwarded: { realIp?: string | null; forwardedFor?: string | null; connectingIp?: string | null },
+  trustForwarded: boolean,
+): string {
+  const remote = canonicalIp(remoteRaw);
+  if (trustForwarded) {
+    const hop =
+      firstHop(forwarded.connectingIp ?? undefined) ??
+      firstHop(forwarded.realIp ?? undefined) ??
+      firstHop(forwarded.forwardedFor ?? undefined);
+    if (hop) {
+      const ip = canonicalIp(hop);
+      if (ip && ip !== "127.0.0.1") return ip;
+    }
   }
   return remote || "127.0.0.1";
+}
+
+export function requestIp(c: Context, cfg: Config): string {
+  const env = c.env as FetchEnv | undefined;
+  const remoteRaw = env?.remoteAddress ?? "";
+  const remote = canonicalIp(remoteRaw);
+  const trustForwarded = cfg.server.host === "0.0.0.0" || remote === "127.0.0.1" || remote === "";
+  return resolveClientIp(
+    remoteRaw,
+    {
+      connectingIp: c.req.header("cf-connecting-ip"),
+      realIp: c.req.header("x-real-ip"),
+      forwardedFor: c.req.header("x-forwarded-for"),
+    },
+    trustForwarded,
+  );
 }
 
 export function inferClientKind(input: { userAgent?: string; protocol?: Protocol }): ClientKind {

@@ -154,6 +154,39 @@ describe("JobEngine", () => {
     }
   });
 
+  test("several says stay open until the turn is ended", async () => {
+    const { engine, db } = setup();
+    try {
+      const job = await engine.create({
+        protocol: "anthropic_messages",
+        stream: false,
+        rawBody: new TextEncoder().encode("multi"),
+        headers: {},
+        normalized: emptyNormalizedRequest({
+          messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+      await engine.say(job.id, [{ type: "text", text: "one" }]);
+      expect(engine.get(job.id).status).toBe("streaming");
+      const mid = await engine.say(job.id, [{ type: "text", text: "two" }]);
+      expect(mid.blocks.filter((b) => b.type === "text").map((b) => (b.type === "text" ? b.text : ""))).toEqual([
+        "one",
+        "two",
+      ]);
+      const done = await engine.completeFromTest(job.id, []);
+      expect(done.stopReason).toBe("end_turn");
+      expect(done.blocks.filter((b) => b.type === "text").map((b) => (b.type === "text" ? b.text : ""))).toEqual([
+        "one",
+        "two",
+      ]);
+      expect(engine.get(job.id).status).toBe("completed");
+      await expect(engine.say(job.id, [{ type: "text", text: "three" }])).rejects.toBeInstanceOf(JobConflictError);
+    } finally {
+      engine.stop();
+      db.close();
+    }
+  });
+
   test("a follow-up after complete stays on the thread and a second complete conflicts", async () => {
     const { engine, db } = setup();
     try {
