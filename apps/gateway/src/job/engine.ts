@@ -315,11 +315,17 @@ export class JobEngine {
   }
 
   waitUntilAttached(jobId: string): Promise<void> {
-    return this.require(jobId).attached;
+    const rt = this.jobs.get(jobId);
+    if (rt) return rt.attached;
+    // Already finished and dropped from memory. The attach wait cannot still be pending.
+    this.terminalFromDb(jobId);
+    return Promise.resolve();
   }
 
   waitUntilTerminal(jobId: string): Promise<TerminalState> {
-    return this.require(jobId).terminal;
+    const rt = this.jobs.get(jobId);
+    if (rt) return rt.terminal;
+    return Promise.resolve(this.terminalFromDb(jobId));
   }
 
   async completeFromTest(
@@ -681,6 +687,9 @@ export class JobEngine {
     });
     rt.resolveAttached();
     rt.resolveTerminal(state);
+    // The row is durable. Holding the Runtime kept every past request body in the
+    // desk poll and in thread matching for the life of the process.
+    this.jobs.delete(rt.id);
   }
 
   private touchCaller(rt: Runtime): void {
@@ -729,8 +738,32 @@ export class JobEngine {
 
   private require(jobId: string): Runtime {
     const rt = this.jobs.get(jobId);
-    if (!rt) throw new JobNotFoundError(jobId);
-    return rt;
+    if (rt) return rt;
+    const row = this.db.getJob(jobId);
+    if (row && (row.status === "completed" || row.status === "cancelled" || row.status === "failed")) {
+      throw new JobConflictError(`job ${jobId} already ${row.status}`);
+    }
+    throw new JobNotFoundError(jobId);
+  }
+
+  private terminalFromDb(jobId: string): TerminalState {
+    const row = this.db.getJob(jobId);
+    if (!row) throw new JobNotFoundError(jobId);
+    if (row.status !== "completed" && row.status !== "cancelled" && row.status !== "failed") {
+      throw new JobNotFoundError(jobId);
+    }
+    let error: string | undefined;
+    let code: string | undefined;
+    if (row.error_json) {
+      try {
+        const parsed = JSON.parse(row.error_json) as { code?: string; message?: string };
+        error = parsed.message ?? parsed.code;
+        code = parsed.code;
+      } catch {
+        error = row.error_json;
+      }
+    }
+    return { status: row.status, error, code };
   }
 
   private summary(rt: Runtime): JobSummary {

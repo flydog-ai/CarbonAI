@@ -135,12 +135,24 @@ export class CarbonDb {
   }
 
   listRecent(limit = 50): JobRow[] {
-    return this.sqlite.query("SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?").all(limit) as JobRow[];
+    // Desk polls this every couple of seconds. Omit request/response bodies.
+    return this.sqlite
+      .query(
+        `SELECT id, status, protocol, model, client_label, stream, created_at,
+                input_tokens, last_user_preview, request_hash, visitor_id,
+                caller_label, client_kind, client_ip, key_prefix, owner_id,
+                thread_id, turn_count
+         FROM jobs ORDER BY created_at DESC LIMIT ?`,
+      )
+      .all(limit) as JobRow[];
   }
 
   listRecentByClient(clientKeyId: string, limit = 40): JobRow[] {
     return this.sqlite
-      .query("SELECT * FROM jobs WHERE client_key_id = ? ORDER BY created_at DESC LIMIT ?")
+      .query(
+        `SELECT id, created_at, thread_id, visitor_id, normalized_json
+         FROM jobs WHERE client_key_id = ? ORDER BY created_at DESC LIMIT ?`,
+      )
       .all(clientKeyId, limit) as JobRow[];
   }
 

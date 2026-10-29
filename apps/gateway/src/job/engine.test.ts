@@ -6,7 +6,7 @@ import { DEFAULT_CONFIG, type Config } from "@carbon-ai/config";
 import { openDatabase, type CarbonDb } from "@carbon-ai/db";
 import { JobEngine } from "./engine.ts";
 import { emptyNormalizedRequest } from "@carbon-ai/protocol";
-import { JobQueueFullError } from "./errors.ts";
+import { JobConflictError, JobNotFoundError, JobQueueFullError } from "./errors.ts";
 import { TestAdapter } from "./test-adapter.ts";
 
 function cfg(over: (c: Config) => void): Config {
@@ -150,6 +150,73 @@ describe("JobEngine", () => {
       expect(secondEngine.output(first.id).blocks.some((b) => b.type === "text" && b.text === "你也会啊")).toBe(true);
       secondEngine.stop();
     } finally {
+      db.close();
+    }
+  });
+
+  test("a follow-up after complete stays on the thread and a second complete conflicts", async () => {
+    const { engine, db } = setup();
+    try {
+      const firstNorm = emptyNormalizedRequest({
+        messages: [{ role: "user", parts: [{ type: "text", text: "你好" }] }],
+      });
+      const first = await engine.create({
+        protocol: "anthropic_messages",
+        stream: false,
+        rawBody: new TextEncoder().encode("same-proc-1"),
+        headers: {},
+        normalized: firstNorm,
+        clientKeyId: "key_alice",
+      });
+      await engine.completeFromTest(first.id, [{ type: "text", text: "你也会啊" }]);
+      expect(await engine.waitUntilTerminal(first.id)).toMatchObject({ status: "completed" });
+      const second = await engine.create({
+        protocol: "anthropic_messages",
+        stream: false,
+        rawBody: new TextEncoder().encode("same-proc-2"),
+        headers: {},
+        normalized: emptyNormalizedRequest({
+          messages: [
+            { role: "user", parts: [{ type: "text", text: "你好" }] },
+            { role: "assistant", parts: [{ type: "text", text: "你也会啊" }] },
+            { role: "user", parts: [{ type: "text", text: "OK  不错" }] },
+          ],
+        }),
+        clientKeyId: "key_alice",
+      });
+      expect(second.threadId).toBe(first.threadId);
+      expect(engine.get(first.id).status).toBe("completed");
+      await expect(
+        engine.completeFromTest(first.id, [{ type: "text", text: "again" }]),
+      ).rejects.toBeInstanceOf(JobConflictError);
+      await expect(engine.completeFromTest("job_missing", [{ type: "text", text: "nope" }])).rejects.toBeInstanceOf(
+        JobNotFoundError,
+      );
+    } finally {
+      engine.stop();
+      db.close();
+    }
+  });
+
+  test("finished jobs do not keep the desk list unbounded", async () => {
+    const { engine, db } = setup();
+    try {
+      for (let i = 0; i < 81; i++) {
+        const job = await engine.create({
+          protocol: "anthropic_messages",
+          stream: false,
+          rawBody: new TextEncoder().encode(`body-${i}`),
+          headers: {},
+          normalized: emptyNormalizedRequest({
+            messages: [{ role: "user", parts: [{ type: "text", text: `m-${i}` }] }],
+          }),
+          clientKeyId: `k-${i}`,
+        });
+        await engine.completeFromTest(job.id, [{ type: "text", text: "ok" }]);
+      }
+      expect(engine.list()).toHaveLength(80);
+    } finally {
+      engine.stop();
       db.close();
     }
   });

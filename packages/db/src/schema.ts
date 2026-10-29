@@ -51,6 +51,7 @@ CREATE INDEX IF NOT EXISTS jobs_status_created ON jobs(status, created_at);
 CREATE INDEX IF NOT EXISTS jobs_vendor_id ON jobs(vendor_id);
 CREATE INDEX IF NOT EXISTS jobs_request_hash ON jobs(request_hash);
 CREATE INDEX IF NOT EXISTS jobs_client_created ON jobs(client_key_id, created_at);
+CREATE INDEX IF NOT EXISTS jobs_created_at ON jobs(created_at);
 
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
