@@ -50,6 +50,10 @@ default_display = "Carbon AI"
 "claude-sonnet-4-6" = "Carbon AI (Sonnet 4.6 slot)"
 "gpt-5" = "Carbon AI (GPT slot)"
 
+# Browser access to the model API (/v1/*). Client keys only; console cookies never cross origins.
+# Empty origins = any origin ("*"). Otherwise exact scheme://host[:port].
+# 浏览器跨域调用模型 API（/v1/*）。只认客户端 key，控制台 cookie 不跨域。
+# origins 为空 = 任意来源（"*"）；否则写完整 scheme://host[:port]。
 [cors]
 enabled = false
 origins = []

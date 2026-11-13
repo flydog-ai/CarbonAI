@@ -18,6 +18,7 @@ import { debugJobRoutes } from "./routes/debug-jobs.ts";
 import { consoleRoutes } from "./routes/console.ts";
 import { operatorRoutes } from "./routes/operator.ts";
 import { accessLog } from "./http/access-log.ts";
+import { modelApiCors } from "./http/cors.ts";
 import { ChannelHub } from "./channels/hub.ts";
 import { hookRoutes } from "./routes/hooks.ts";
 
@@ -36,6 +37,8 @@ export function createApp(cfg: Config, deps: AppDeps = {}): Hono {
   const app = new Hono();
   const sessions = deps.sessions ?? new HangRegistry();
 
+  const apiCors = modelApiCors(cfg);
+  if (apiCors) app.use("*", apiCors);
   app.use("*", accessLog());
   app.route("/", consoleRoutes());
   app.route("/", homeRoutes(cfg, deps.db));

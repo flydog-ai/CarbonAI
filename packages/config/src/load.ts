@@ -105,6 +105,25 @@ function parseApiKeysJson(raw: string): ApiKey[] {
   });
 }
 
+/** `"*"` or exact browser origins (`scheme://host[:port]`). A bare host would never match, so reject it. */
+function parseCorsOrigins(raw: unknown[]): string[] {
+  return raw.map((item, i) => {
+    if (typeof item !== "string") throw new Error(`cors.origins[${i}] must be a string`);
+    const value = item.trim().replace(/\/+$/, "");
+    if (value === "*") return value;
+    let origin: string;
+    try {
+      origin = new URL(value).origin;
+    } catch {
+      origin = "null";
+    }
+    if (origin === "null" || origin !== value.toLowerCase()) {
+      throw new Error(`Invalid cors.origins[${i}]: ${item} (expected "*" or scheme://host[:port])`);
+    }
+    return origin;
+  });
+}
+
 function generateToken(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
@@ -175,7 +194,7 @@ export function loadConfig(opts: LoadConfigOptions = {}): Config {
   }
   if (file.cors) {
     if (typeof file.cors.enabled === "boolean") cfg.cors.enabled = file.cors.enabled;
-    if (Array.isArray(file.cors.origins)) cfg.cors.origins = file.cors.origins;
+    if (Array.isArray(file.cors.origins)) cfg.cors.origins = parseCorsOrigins(file.cors.origins);
   }
   if (file.openai_chat?.heartbeat === "comment" || file.openai_chat?.heartbeat === "empty_delta") {
     cfg.openaiChat.heartbeat = file.openai_chat.heartbeat;

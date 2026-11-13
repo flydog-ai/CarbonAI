@@ -104,6 +104,23 @@ public_origin = "http://example.test:8080/"
     expect(cfg.site.publicOrigin).toBe("https://live.example");
   });
 
+  test("cors origins are normalized and bare hosts are rejected", () => {
+    const dir = mkdtempSync(join(tmpdir(), "carbon-cors-"));
+    writeFileSync(
+      join(dir, "carbon.toml"),
+      `[cors]\nenabled = true\norigins = ["https://App.example/", " http://127.0.0.1:5173 ", "*"]\n`,
+      "utf8",
+    );
+    const cfg = loadConfig({ cwd: dir, env: {}, generateOperatorTokenIfEmpty: false });
+    expect(cfg.cors.enabled).toBe(true);
+    expect(cfg.cors.origins).toEqual(["https://app.example", "http://127.0.0.1:5173", "*"]);
+
+    for (const bad of ["app.example", "https://app.example/path", "https://app.example:443"]) {
+      writeFileSync(join(dir, "carbon.toml"), `[cors]\norigins = ["${bad}"]\n`, "utf8");
+      expect(() => loadConfig({ cwd: dir, env: {}, generateOperatorTokenIfEmpty: false })).toThrow(/cors\.origins\[0\]/);
+    }
+  });
+
   test("CARBON_CONFIG points at an explicit file", () => {
     const dir = mkdtempSync(join(tmpdir(), "carbon-cfg-"));
     mkdirSync(join(dir, "nested"), { recursive: true });

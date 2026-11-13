@@ -105,9 +105,13 @@ bun start
 
 Config: repo-root `carbon.toml`. Also `CARBON_PORT`, `CARBON_HOST`, `CARBON_DATA_DIR`, `CARBON_CONFIG`, `CARBON_BOOTSTRAP_USERNAME`, `CARBON_BOOTSTRAP_PASSWORD`, `CARBON_SITE_NAME`, `CARBON_SITE_NAME_ZH`, `CARBON_PUBLIC_ORIGIN`. Superadmin Settings in `/console` can set site name and public origin without editing the file.
 
+Browser agents on another origin: set `[cors] enabled = true` (empty `origins` = any). Only the model API (`/v1/*`) opens, without credentials; `/console` and its cookie stay same-origin.
+
 Dev: `bun dev` (gateway watch + Vite rebuild of the console). `bun start` builds `apps/console/dist` then starts one Bun process.
 
 配置见仓库根目录 `carbon.toml`。也可用 `CARBON_PORT`、`CARBON_HOST`、`CARBON_DATA_DIR`、`CARBON_CONFIG`、`CARBON_BOOTSTRAP_USERNAME`、`CARBON_BOOTSTRAP_PASSWORD`、`CARBON_SITE_NAME`、`CARBON_SITE_NAME_ZH`、`CARBON_PUBLIC_ORIGIN`。超级管理员可在 `/console` 的设置里改站点名和对外域名，不必改文件。
+
+其它域名下的浏览器智能体：设 `[cors] enabled = true`（`origins` 为空即任意来源）。只开放模型 API（`/v1/*`），不带凭据；`/console` 及其 cookie 仍限同源。
 
 开发：`bun dev`（网关 watch + 控制台 Vite 重建）。`bun start` 先编 `apps/console/dist`，再单进程启动。
 
